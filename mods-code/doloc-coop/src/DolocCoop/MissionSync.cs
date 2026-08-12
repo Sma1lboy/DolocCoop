@@ -42,7 +42,7 @@ namespace DolocCoop
                 var finished = ReadFinished();
                 if (finished == null) return;
 
-                string sig = string.Join(",", finished.ToArray());
+                string sig = SyncMath.MissionSignature(finished);   // 顺序无关的指纹,纯函数有测试守着
                 if (sig == _lastSignature) return;   // 没有新完成的任务就不发
                 _lastSignature = sig;
 
@@ -116,3 +116,4 @@ namespace DolocCoop
         }
     }
 }
+

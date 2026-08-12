@@ -41,6 +41,17 @@ namespace CoopCoreTests
             PeerLeftClearsState();
             LoopbackDeliversMessages();
 
+            Console.WriteLine("\n-- 同步计算(SyncMath)--");
+            DropKeyQuantizesCoordinates();
+            DropSignatureIsOrderIndependent();
+            EmptySignatureIsNotNull();
+            ContainerSignatureRespectsSlotOrder();
+            MissionSignatureIsOrderIndependent();
+            ReconcileFindsAddAndRemove();
+            ReconcileIdenticalIsNoop();
+            FindVanishedDetectsPickup();
+            FindVanishedIgnoresUnknown();
+
             Console.WriteLine($"\n通过 {_passed} · 失败 {_failed}");
             return _failed == 0 ? 0 : 1;
         }
@@ -269,6 +280,113 @@ namespace CoopCoreTests
             {
                 host.Dispose(); client.Dispose();
             }
+        }
+
+        // ---------------- SyncMath ----------------
+
+        /// <summary>量化要能吸收浮点抖动:同一格里的微小差异必须算成同一个 key。</summary>
+        private static void DropKeyQuantizesCoordinates()
+        {
+            string a = SyncMath.DropKey("wood", 1.50f, 2.50f);
+            string b = SyncMath.DropKey("wood", 1.52f, 2.48f);   // 抖动,同一格
+            string c = SyncMath.DropKey("wood", 3.50f, 2.50f);   // 明显不同的位置
+            Check("量化坐标吸收抖动", a == b && a != c, $"a={a} b={b} c={c}");
+        }
+
+        /// <summary>遍历顺序变化不该被当成"地面变了",否则会无谓地反复重广播。</summary>
+        private static void DropSignatureIsOrderIndependent()
+        {
+            var one = new List<DropEntry>
+            {
+                new DropEntry { ItemName = "wood", X = 1, Y = 1 },
+                new DropEntry { ItemName = "stone", X = 5, Y = 5 },
+            };
+            var two = new List<DropEntry>
+            {
+                new DropEntry { ItemName = "stone", X = 5, Y = 5 },
+                new DropEntry { ItemName = "wood", X = 1, Y = 1 },
+            };
+            Check("掉落物指纹顺序无关", SyncMath.DropSignature(one) == SyncMath.DropSignature(two));
+        }
+
+        /// <summary>
+        /// 回归用例:空集合的指纹是空串而不是 null,null 只留给"还没算过"。
+        /// 曾经拿空串当"还没发过"的哨兵,导致地上没东西的存档永远不广播。
+        /// </summary>
+        private static void EmptySignatureIsNotNull()
+        {
+            string empty = SyncMath.DropSignature(new List<DropEntry>());
+            string ofNull = SyncMath.DropSignature(null);
+            Check("空集合指纹 ≠ null", empty == "" && ofNull == null,
+                  $"empty=[{empty}] ofNull={(ofNull == null ? "null" : ofNull)}");
+        }
+
+        /// <summary>箱子的格位顺序有意义(第 1 格和第 3 格不是一回事)。</summary>
+        private static void ContainerSignatureRespectsSlotOrder()
+        {
+            var a = new ContainerState { Slots = new List<SlotItem>
+            {
+                new SlotItem { ItemName = "wood", Count = 1 },
+                new SlotItem { ItemName = "stone", Count = 2 },
+            }};
+            var b = new ContainerState { Slots = new List<SlotItem>
+            {
+                new SlotItem { ItemName = "stone", Count = 2 },
+                new SlotItem { ItemName = "wood", Count = 1 },
+            }};
+            Check("箱子指纹区分格位顺序", SyncMath.ContainerSignature(a) != SyncMath.ContainerSignature(b));
+        }
+
+        private static void MissionSignatureIsOrderIndependent()
+        {
+            var a = new List<string> { "m2", "m1" };
+            var b = new List<string> { "m1", "m2" };
+            Check("任务指纹顺序无关", SyncMath.MissionSignature(a) == SyncMath.MissionSignature(b));
+        }
+
+        private static void ReconcileFindsAddAndRemove()
+        {
+            var local = new List<DropEntry>
+            {
+                new DropEntry { ItemName = "wood", X = 1, Y = 1 },     // 主机没有 → 该删(被人捡了)
+                new DropEntry { ItemName = "stone", X = 2, Y = 2 },    // 两边都有 → 不动
+            };
+            var remote = new List<DropEntry>
+            {
+                new DropEntry { ItemName = "stone", X = 2, Y = 2 },
+                new DropEntry { ItemName = "fish", X = 9, Y = 9 },     // 本地没有 → 该补(别人打掉的)
+            };
+            var r = SyncMath.ReconcileDrops(local, remote);
+            Check("对账找出增删", r.RemoveKeys.Count == 1 && r.RemoveKeys[0].StartsWith("wood@")
+                  && r.Add.Count == 1 && r.Add[0].ItemName == "fish",
+                  $"删{r.RemoveKeys.Count} 增{r.Add.Count}");
+        }
+
+        private static void ReconcileIdenticalIsNoop()
+        {
+            var list = new List<DropEntry> { new DropEntry { ItemName = "wood", X = 1, Y = 1 } };
+            var r = SyncMath.ReconcileDrops(list, list);
+            Check("两边一致时不动", r.RemoveKeys.Count == 0 && r.Add.Count == 0);
+        }
+
+        private static void FindVanishedDetectsPickup()
+        {
+            var known = new Dictionary<string, DropEntry>
+            {
+                [SyncMath.DropKey("wood", 1, 1)] = new DropEntry { ItemName = "wood", X = 1, Y = 1 },
+                [SyncMath.DropKey("stone", 2, 2)] = new DropEntry { ItemName = "stone", X = 2, Y = 2 },
+            };
+            var current = new List<DropEntry> { new DropEntry { ItemName = "stone", X = 2, Y = 2 } };
+            var gone = SyncMath.FindVanished(known, current);
+            Check("发现本地消失的物品", gone.Count == 1 && gone[0].ItemName == "wood", $"消失 {gone.Count} 个");
+        }
+
+        /// <summary>没记录过的东西消失了不该上报 —— 避免刚进房时误报一堆。</summary>
+        private static void FindVanishedIgnoresUnknown()
+        {
+            var gone = SyncMath.FindVanished(new Dictionary<string, DropEntry>(),
+                                             new List<DropEntry>());
+            Check("已知为空时不误报", gone.Count == 0, $"报了 {gone.Count} 个");
         }
 
         // ---------------- 测试脚手架 ----------------

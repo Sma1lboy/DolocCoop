@@ -99,3 +99,4 @@ Start-Process "steam://rungameid/2285550"
   之后持续 `TIME_RECV` 但不再校时(容差生效,不会反复抖动)✔
 - 极端偏差(50 游戏日)→ `TIME_REJECT diff=4319018`,安全阀拦截 ✔
 
+

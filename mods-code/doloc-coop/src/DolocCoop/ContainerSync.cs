@@ -192,12 +192,8 @@ namespace DolocCoop
             return state;
         }
 
-        private static string Signature(ContainerState s)
-        {
-            var sb = new StringBuilder();
-            foreach (var slot in s.Slots) { sb.Append(slot.ItemName); sb.Append('#'); sb.Append(slot.Count); sb.Append('|'); }
-            return sb.ToString();
-        }
+        // 指纹计算抽到 CoopCore.SyncMath(纯函数,有自动化测试守着)
+        private static string Signature(ContainerState s) => SyncMath.ContainerSignature(s);
 
         /// <summary>面板用:当前场景有多少个容器在同步。</summary>
         public static int TrackedCount => LastSignature.Count;

@@ -248,21 +248,11 @@ namespace DolocCoop
             return list;
         }
 
-        /// <summary>量化坐标后的标识。掉落物没有持久 id,靠"名字+位置"区分。</summary>
-        private static string KeyOf(string name, float x, float y)
-        {
-            return name + "@" + Mathf.RoundToInt(x / Quantize) + "," + Mathf.RoundToInt(y / Quantize);
-        }
+        // 标识与指纹的计算已抽到 CoopCore.SyncMath —— 那边是纯函数,有自动化测试守着,
+        // 这里只保留"读游戏 / 写游戏"的薄壳
+        private static string KeyOf(string name, float x, float y) => SyncMath.DropKey(name, x, y, Quantize);
 
-        private static string Signature(List<DropEntry> list)
-        {
-            var keys = new List<string>(list.Count);
-            foreach (var e in list) keys.Add(KeyOf(e.ItemName, e.X, e.Y));
-            keys.Sort(StringComparer.Ordinal);   // 顺序无关,避免因遍历顺序变化误判
-            var sb = new StringBuilder();
-            foreach (var k in keys) { sb.Append(k); sb.Append('|'); }
-            return sb.ToString();
-        }
+        private static string Signature(List<DropEntry> list) => SyncMath.DropSignature(list, Quantize);
 
         /// <summary>面板用:当前房间地上有多少掉落物。</summary>
         public static int LocalCount
