@@ -4,6 +4,8 @@ using BepInEx;
 using BepInEx.Logging;
 using CoopCore;
 using DolocShared;
+using CoopCore.Replication;
+using DolocCoop.Domains;
 using Steamworks;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -70,6 +72,7 @@ namespace DolocCoop
         private static SteamTransport _steam;
         private static LoopbackTransport _loopback;
         private static CoopSession _session;
+        private static SyncRegistry _sync;   // 所有同步域的统一入口
         private static float _stateTimer;
 
         /// <summary>
@@ -173,7 +176,7 @@ namespace DolocCoop
                 DropItemSync.TickHost(_session);
 
 
-                CropSync.TickHost(_session);
+                _sync?.HostTick(Time.unscaledDeltaTime);
             }
 
             // 客机:检查地上有没有东西被自己捡走,需要上报主机(否则主机会把它生成回来)
@@ -233,7 +236,7 @@ namespace DolocCoop
             sb.AppendLine();
             sb.AppendLine("天气: " + TimeSync.DescribeWeather());
             sb.AppendLine("任务: " + MissionSync.Describe());
-            sb.AppendLine("箱子 " + ContainerSync.TrackedCount + " · 种植槽 " + CropSync.TrackedCount + " · 地上掉落物 " + DropItemSync.LocalCount);
+            sb.AppendLine("箱子 " + ContainerSync.TrackedCount + " · 种植槽 " + (_sync?.TrackedOf("作物") ?? 0) + " · 地上掉落物 " + DropItemSync.LocalCount);
             sb.AppendLine("我的动作: " + ActionSync.Friendly(ActionSync.ReadLocalActionState()));
             if (SaveGuard.IsClient)
                 sb.AppendLine("<color=#ffd479>存档保护: 本地只读,已拦截 " + SaveGuard.BlockedCount + " 次存盘</color>");
@@ -368,6 +371,10 @@ namespace DolocCoop
             _session?.Dispose();
             _transport = transport;
             _session = new CoopSession(transport, Plugin.PluginVersion);
+            // 同步域集中注册:加新领域只需在这里加一行,
+            // 计时/差分/重发/路由都由 SyncRegistry 负责
+            _sync = new SyncRegistry(_session, s => { Plugin.Log.LogInfo(s); NetLog.Log(s); });
+            _sync.Register(new CropDomain());
             SaveGuard.SetClient(!transport.IsHost);   // 客机身份 → 本地存档转只读
             _session.Log += s => { Plugin.Log.LogInfo("[Session] " + s); NetLog.Log("SESSION " + s); };
             _session.Rejected += (id, why) =>
@@ -384,7 +391,7 @@ namespace DolocCoop
                 if (_transport != null && _transport.IsHost) TimeSync.ForceSendNext();
                 if (_transport != null && _transport.IsHost) ContainerSync.ResendAll();
                 if (_transport != null && _transport.IsHost) MissionSync.ResendAll();
-                if (_transport != null && _transport.IsHost) CropSync.ResendAll();
+                if (_transport != null && _transport.IsHost) _sync?.ResendAll();
                 if (_transport != null && _transport.IsHost) DropItemSync.ResendAll();
                 ProfileSync.Resend();   // 新人进房:把自己的昵称与帽子再报一次
             };
@@ -419,10 +426,6 @@ namespace DolocCoop
             _session.ContainersReceived += states =>
             {
                 if (_transport != null && !_transport.IsHost) ContainerSync.ApplyRemote(states);
-            };
-            _session.CropsReceived += crops =>
-            {
-                if (_transport != null && !_transport.IsHost) CropSync.ApplyRemote(crops);
             };
             _session.MissionsReceived += ids =>
             {
@@ -473,6 +476,8 @@ namespace DolocCoop
         }
     }
 }
+
+
 
 
 

@@ -37,7 +37,8 @@ namespace CoopCore
         MissionSync = 22,    // 主机→客机: 已完成任务 id 列表
         DropItemSync = 23,   // 主机→客机: 当前房间掉落物全量列表
         DropPickup = 24,     // 客机→主机: 我捡走了这个掉落物,请从世界里移除
-        CropSync = 25,       // 主机→客机: 作物长势
+        CropSync = 25,       // 主机→客机: 作物长势(旧,迁移中)
+        DomainSync = 26,     // 主机→客机: 通用同步域负载 [channel:1][payload]
 
         // 预留(注意别和上面的值撞:C# 允许重复值,会静默变成别名,
         // 到时候发 SceneChange 实际发出去的是 ContainerSync,极难排查)
@@ -67,6 +68,7 @@ namespace CoopCore
         }
     }
 }
+
 
 
 

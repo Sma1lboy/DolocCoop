@@ -81,6 +81,8 @@ namespace CoopCore
         public event Action<RemotePeer, string, float, float> PeerActionReceived;
         /// <summary>收到主机的作物长势。</summary>
         public event Action<List<CropState>> CropsReceived;
+        /// <summary>收到某个同步域的负载:(频道号, 读取器)。由 SyncRegistry 消费。</summary>
+        public event Action<byte, System.IO.BinaryReader> DomainPayloadReceived;
         /// <summary>收到主机的已完成任务列表。</summary>
         public event Action<List<string>> MissionsReceived;
         /// <summary>收到主机的掉落物列表(全量对账)。</summary>
@@ -292,6 +294,20 @@ namespace CoopCore
                     bw.Write(c.GrowthValue); bw.Write(c.HealthValue);
                     bw.Write(c.IsMature); bw.Write(c.IsDead); bw.Write(c.IsMoist); bw.Write(c.IsPolluted);
                 }
+            });
+            _transport.Broadcast(data, data.Length, SendMode.Reliable);
+        }
+
+        /// <summary>
+        /// 发一个同步域的负载。由 SyncRegistry 调用,业务代码不直接用。
+        /// 帧格式:[DomainSync][channel:1][payload…]
+        /// </summary>
+        public void SendDomainPayload(byte channel, byte[] payload, int length)
+        {
+            var data = MsgWriter.Frame(MsgType.DomainSync, bw =>
+            {
+                bw.Write(channel);
+                bw.Write(payload, 0, length);
             });
             _transport.Broadcast(data, data.Length, SendMode.Reliable);
         }
@@ -510,6 +526,14 @@ namespace CoopCore
                     }
                     break;
 
+                case MsgType.DomainSync:
+                    using (var br = MsgWriter.Payload(data, length))
+                    {
+                        byte channel = br.ReadByte();
+                        DomainPayloadReceived?.Invoke(channel, br);
+                    }
+                    break;
+
                 case MsgType.MissionSync:
                     using (var br = MsgWriter.Payload(data, length))
                     {
@@ -585,5 +609,6 @@ namespace CoopCore
         }
     }
 }
+
 
 
