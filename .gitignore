@@ -19,3 +19,8 @@ mods/*/preview.png
 mods/*/icon.png
 mods/*/Content/Texture/
 dist/
+
+# 密钥,绝不入库
+.env
+.env.*
+
