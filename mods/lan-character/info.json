@@ -1,0 +1,17 @@
+{
+  "name": "Lan",
+  "author": "sma1lboy",
+  "version": "0.1.0",
+  "description": "A custom protagonist look.",
+  "tags": ["Protagonist Optimization"],
+  "localized_name": {
+    "schinese": "小蓝",
+    "tchinese": "小藍",
+    "english": "Lan"
+  },
+  "localized_description": {
+    "schinese": "主角外观替换:自定义发色与头像。",
+    "tchinese": "主角外觀替換:自訂髮色與頭像。",
+    "english": "Protagonist look replacement: custom hair color and portrait."
+  }
+}
