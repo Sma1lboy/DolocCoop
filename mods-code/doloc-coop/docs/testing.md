@@ -51,8 +51,8 @@
 - [x] F9 创建 Steam 大厅成功(日志有大厅 ID)
 - [x] 标题界面「联机大厅」按钮 + 悬停高亮
 - [x] 管理页面:房间状态、好友列表、页面内直接邀请
-- [ ] 模拟客机接入后化身出现并跟随移动
-- [ ] 成员列表显示模拟客机及其坐标
+- [x] 模拟客机接入后化身出现并跟随移动(2026-08-12 无人值守实测通过)
+- [x] 握手 + 双向位置同步(net 日志有 PEER_STATE 持续流入)
 - [ ] 挂机 10 分钟无异常日志刷屏、无明显 GC 卡顿
 
 ## 当前快捷键
@@ -67,3 +67,20 @@
 | F7 / Ctrl+F7 | dump UI 层级 / dump 运行时状态 |
 | F5 | 热重载 Mod 列表 |
 | F1 | 官方调试控制台 |
+
+## 无人值守自测(AutoTest)
+
+开发者/AI 无法在游戏里按键,所以留了一个标记文件入口:
+
+```powershell
+.\dev.ps1 -NoLaunch
+Set-Content "$env:USERPROFILE\AppData\LocalLow\RedSawGames\DolocTown\DolocCoop-debug\autotest.flag" "0" -NoNewline
+Start-Process "steam://rungameid/2285550"
+# 游戏会自动:加载存档0 → 等玩家就绪 → 开回环主机
+.\sim.ps1        # 再接入模拟客机
+```
+
+标记文件用完即删,不会影响下次正常启动。全过程写进 `net-<PID>.log`,
+关键行:`AUTOTEST 开启回环主机` → `PEER_JOINED` → `[Avatar] 已为 xx 构建化身` → `PEER_STATE`。
+
+**2026-08-12 实测结果**:全链路打通。

@@ -38,6 +38,9 @@ namespace DolocCoop
         public event Action<ulong> PeerDisconnected;
         public event Action<ulong, byte[], int> MessageReceived;
 
+        /// <summary>进入大厅(自己建的或接受邀请加入的)。参数:是否房主。</summary>
+        public event Action<bool> LobbyEntered;
+
         public SteamTransport(Action<string> log)
         {
             _log = log ?? (_ => { });
@@ -168,15 +171,27 @@ namespace DolocCoop
         private void OnLobbyEnter(LobbyEnter_t cb)
         {
             _lobbyId = new CSteamID(cb.m_ulSteamIDLobby);
+
+            // 房主判定以 Steam 为准(自己建的房 owner 就是自己)
+            var owner = SteamMatchmaking.GetLobbyOwner(_lobbyId);
+            _isHost = owner.m_SteamID == SelfId;
+
             string ver = SteamMatchmaking.GetLobbyData(_lobbyId, LobbyVersionKey);
-            _log($"已进入大厅 {_lobbyId} (协议版本 {ver})");
-            // 与既有成员建立 P2P(向每个成员发握手包由 CoopSession 完成,这里登记 peer)
+            string modId = SteamMatchmaking.GetLobbyData(_lobbyId, LobbyModIdKey);
+            _log($"已进入大厅 {_lobbyId} (身份 {(_isHost ? "房主" : "客机")}, 协议 {ver}, mod {modId})");
+
+            if (!_isHost && modId != LobbyModIdentifier)
+                _log($"警告:这个房间的 mod 标识是 \"{modId}\",可能版本不匹配");
+
+            // 与既有成员建立 P2P(握手包由 CoopSession 在 PeerConnected 时发)
             int n = SteamMatchmaking.GetNumLobbyMembers(_lobbyId);
             for (int i = 0; i < n; i++)
             {
                 var member = SteamMatchmaking.GetLobbyMemberByIndex(_lobbyId, i);
                 if (member.m_SteamID != SelfId) AddPeer(member);
             }
+
+            LobbyEntered?.Invoke(_isHost);
         }
 
         private void OnLobbyChatUpdate(LobbyChatUpdate_t cb)

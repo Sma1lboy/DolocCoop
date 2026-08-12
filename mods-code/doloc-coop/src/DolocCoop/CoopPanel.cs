@@ -45,6 +45,15 @@ namespace DolocCoop
             if (_visible) { Refresh(); RebuildFriendRows(force: true); }
         }
 
+        /// <summary>直接显示面板(进入房间时自动弹出)。</summary>
+        public static void Show()
+        {
+            _visible = true;
+            if (_canvas != null) _canvas.enabled = true;
+            Refresh();
+            RebuildFriendRows(force: true);
+        }
+
         public static void Toast(string msg)
         {
             _toast = msg;

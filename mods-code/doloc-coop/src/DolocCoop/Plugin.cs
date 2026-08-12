@@ -43,9 +43,12 @@ namespace DolocCoop
             CoopPanel.OnInviteFriend = CoopRuntime.InviteFriend;
             CoopPanel.OnOpenSteamOverlay = CoopRuntime.OpenInvite;
 
+            CoopRuntime.Init();
+
             UnityLoopDriver.Add(CoopRuntime.Tick);
             UnityLoopDriver.Add(CoopMenu.Tick);
             UnityLoopDriver.Add(CoopPanel.Tick);
+            UnityLoopDriver.Add(AutoTest.Tick);
             UnityLoopDriver.Install(s => Log.LogInfo(s));
         }
     }
@@ -60,6 +63,42 @@ namespace DolocCoop
         private static LoopbackTransport _loopback;
         private static CoopSession _session;
         private static float _stateTimer;
+
+        /// <summary>
+        /// 启动时就建好 SteamTransport —— 好友邀请是 Steam 回调推过来的,
+        /// 必须在收到邀请之前就注册好回调,否则玩家点了邀请没人接。
+        /// </summary>
+        public static void Init()
+        {
+            try
+            {
+                if (!SteamAPI.IsSteamRunning())
+                {
+                    Plugin.Log.LogWarning("Steam 未运行,联机功能不可用(回环测试仍可用)");
+                    return;
+                }
+                EnsureSteam();
+                _steam.LobbyEntered += OnLobbyEntered;
+                Plugin.Log.LogInfo("Steam 传输已就绪,可接收好友邀请");
+                NetLog.Log("STEAM_READY 已注册邀请回调");
+            }
+            catch (Exception e)
+            {
+                Plugin.Log.LogError("初始化 Steam 传输失败: " + e);
+            }
+        }
+
+        /// <summary>进入大厅(自建或接受邀请):建立会话并把管理页面弹出来。</summary>
+        private static void OnLobbyEntered(bool isHost)
+        {
+            EnsureSession(_steam);
+            NetLog.Log($"LOBBY_ENTERED isHost={isHost}");
+            CoopPanel.Show();
+            CoopPanel.Toast(isHost ? "房间已创建,去右边邀请好友" : "已加入房间,等待房主开始");
+
+            // 客机进房后把自己的名字报给房主,成员列表才显示得出人名
+            try { _session?.SendProfile(SteamFriends.GetPersonaName(), ""); } catch { }
+        }
 
         public static void Tick()
         {
@@ -122,6 +161,9 @@ namespace DolocCoop
 
         public static void CreateSteamLobby() => StartSteamHost();
         public static void OpenInvite() => Invite();
+
+        /// <summary>供 AutoTest 无人值守调用:开回环主机(等价于按 F6)。</summary>
+        public static void StartLoopbackHostForTest() => StartLoopback(asClient: false);
 
         /// <summary>给面板用的好友列表(需要先有 SteamTransport;没有就临时建一个只为读好友)。</summary>
         public static List<SteamTransport.FriendInfo> GetFriends()

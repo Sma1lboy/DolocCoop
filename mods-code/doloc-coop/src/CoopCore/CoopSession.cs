@@ -86,6 +86,7 @@ namespace CoopCore
             if (Peers.TryGetValue(id, out var peer))
             {
                 Peers.Remove(id);
+                _announced.Remove(id);
                 PeerLeft?.Invoke(peer);
             }
         }
@@ -109,7 +110,7 @@ namespace CoopCore
                         var peer = GetOrAdd(from);
                         var ack = MsgWriter.Frame(MsgType.HelloAck, bw => { bw.Write(true); bw.Write(Protocol.Version); });
                         _transport.Send(from, ack, ack.Length, SendMode.Reliable);
-                        PeerJoined?.Invoke(peer);
+                        RaiseJoinedOnce(peer);
                     }
                     break;
 
@@ -118,7 +119,7 @@ namespace CoopCore
                     {
                         bool ok = br.ReadBoolean();
                         Log?.Invoke(ok ? $"peer {from} 握手成功" : $"peer {from} 拒绝: 版本不匹配");
-                        if (ok) PeerJoined?.Invoke(GetOrAdd(from));
+                        if (ok) RaiseJoinedOnce(GetOrAdd(from));
                     }
                     break;
 
@@ -160,6 +161,19 @@ namespace CoopCore
             return peer;
         }
 
+        /// <summary>
+        /// 只在第一次认识这个 peer 时抛 PeerJoined。
+        /// 握手是双向的(Hello 和 HelloAck 各触发一次),不去重会重复通知。
+        /// </summary>
+        private void RaiseJoinedOnce(RemotePeer peer)
+        {
+            if (_announced.Contains(peer.Id)) return;
+            _announced.Add(peer.Id);
+            PeerJoined?.Invoke(peer);
+        }
+
+        private readonly HashSet<ulong> _announced = new HashSet<ulong>();
+
         public void Dispose()
         {
             _transport.PeerConnected -= OnPeerConnected;
@@ -168,3 +182,4 @@ namespace CoopCore
         }
     }
 }
+
