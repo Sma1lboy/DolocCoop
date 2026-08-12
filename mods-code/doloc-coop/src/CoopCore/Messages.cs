@@ -14,7 +14,8 @@ namespace CoopCore
         // v4: 新增 ContainerSync(箱子内容)
         // v5: 新增 PlayerAction(行为)与 MissionSync(任务)
         // v6: 新增 DropItemSync(地上掉落物)
-        public const ushort Version = 6;
+        // v7: 新增 DropPickup(客机捡拾上报)—— 没有它会刷物品,见 DropItemSync 注释
+        public const ushort Version = 7;
     }
 
     public enum MsgType : byte
@@ -34,6 +35,7 @@ namespace CoopCore
         ContainerSync = 21,  // 主机→客机: 若干箱子的整箱内容
         MissionSync = 22,    // 主机→客机: 已完成任务 id 列表
         DropItemSync = 23,   // 主机→客机: 当前房间掉落物全量列表
+        DropPickup = 24,     // 客机→主机: 我捡走了这个掉落物,请从世界里移除
 
         // 预留(注意别和上面的值撞:C# 允许重复值,会静默变成别名,
         // 到时候发 SceneChange 实际发出去的是 ContainerSync,极难排查)

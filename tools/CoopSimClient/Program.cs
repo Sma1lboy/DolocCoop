@@ -59,6 +59,9 @@ namespace CoopSimClient
 
             session.Log += s => Console.WriteLine("[Session] " + s);
             session.PeerJoined += p => Console.WriteLine($"[+] 玩家加入: {p.Id}");
+            // 事件注册必须在主循环之外 —— 放循环里会每轮重复挂一个,回调被调用几十次
+            session.DropPickupReceived += (from, picked) =>
+                Console.WriteLine($"[捡拾] 客机 {from} 报告捡走 {picked.Count} 个: {string.Join(", ", picked.ConvertAll(d => d.ItemName))}");
             session.PeerLeft += p => Console.WriteLine($"[-] 玩家离开: {p.Id}");
             session.PeerStateUpdated += p =>
             {
@@ -102,6 +105,17 @@ namespace CoopSimClient
                 // 动画哈希传 0 = 让对端用默认状态;真实同步时这里是游戏的 Animator 状态哈希
                 session.SendLocalState(x, y, faceLeft, 0, 0f);
 
+                // 客机模式:定期上报一个假捡拾,验证主机侧的接收与处理路径
+                // (地上没有对应物品时应记 DROP_PICKUP_MISS 并优雅忽略)
+                if (!asHost && tick % 75 == 0 && session.Peers.Count > 0)
+                {
+                    session.SendDropPickup(new System.Collections.Generic.List<DropEntry>
+                    {
+                        new DropEntry { ItemName = "sim_fake_drop", X = 10f, Y = 20f }
+                    });
+                    Console.WriteLine("    已上报一个假捡拾 sim_fake_drop@(10,20)");
+                }
+
                 // 主机模式:定期广播一个"假时间",用来验证客机(游戏)会不会跟着校时
                 if (asHost && tick % 30 == 0 && session.Peers.Count > 0)
                 {
@@ -138,6 +152,7 @@ namespace CoopSimClient
         }
     }
 }
+
 
 
 

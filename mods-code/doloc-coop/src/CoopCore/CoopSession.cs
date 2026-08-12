@@ -70,6 +70,8 @@ namespace CoopCore
         public event Action<List<string>> MissionsReceived;
         /// <summary>收到主机的掉落物列表(全量对账)。</summary>
         public event Action<List<DropEntry>> DropItemsReceived;
+        /// <summary>某个客机报告它捡走了这些掉落物(主机侧处理)。</summary>
+        public event Action<ulong, List<DropEntry>> DropPickupReceived;
         public event Action<string> Log;
 
         public CoopSession(ITransport transport, string modVersion)
@@ -179,6 +181,29 @@ namespace CoopCore
                     bw.Write(drops[i].ItemName ?? "");
                     bw.Write(drops[i].X);
                     bw.Write(drops[i].Y);
+                }
+            });
+            _transport.Broadcast(data, data.Length, SendMode.Reliable);
+        }
+
+        /// <summary>
+        /// 客机上报"我捡走了这些掉落物",请主机从世界里移除。
+        ///
+        /// 为什么需要:背包是各人各自的,不用同步;但地上的物件是共享世界的一部分。
+        /// 客机捡了却不告诉主机,主机下一轮全量广播又会把它重新生成 —— 客机白得一份,
+        /// 直接变成刷物品。这条消息就是补上这个缺口。
+        /// </summary>
+        public void SendDropPickup(IList<DropEntry> picked)
+        {
+            if (picked == null || picked.Count == 0) return;
+            var data = MsgWriter.Frame(MsgType.DropPickup, bw =>
+            {
+                bw.Write((ushort)Math.Min(picked.Count, ushort.MaxValue));
+                for (int i = 0; i < picked.Count; i++)
+                {
+                    bw.Write(picked[i].ItemName ?? "");
+                    bw.Write(picked[i].X);
+                    bw.Write(picked[i].Y);
                 }
             });
             _transport.Broadcast(data, data.Length, SendMode.Reliable);
@@ -326,6 +351,17 @@ namespace CoopCore
                         for (int i = 0; i < n; i++)
                             drops.Add(new DropEntry { ItemName = br.ReadString(), X = br.ReadSingle(), Y = br.ReadSingle() });
                         DropItemsReceived?.Invoke(drops);
+                    }
+                    break;
+
+                case MsgType.DropPickup:
+                    using (var br = MsgWriter.Payload(data, length))
+                    {
+                        int n = br.ReadUInt16();
+                        var picked = new List<DropEntry>(n);
+                        for (int i = 0; i < n; i++)
+                            picked.Add(new DropEntry { ItemName = br.ReadString(), X = br.ReadSingle(), Y = br.ReadSingle() });
+                        DropPickupReceived?.Invoke(from, picked);
                     }
                     break;
 

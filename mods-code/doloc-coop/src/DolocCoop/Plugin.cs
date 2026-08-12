@@ -125,6 +125,18 @@ namespace DolocCoop
                 DropItemSync.TickHost(_session);
             }
 
+            // 客机:检查地上有没有东西被自己捡走,需要上报主机(否则主机会把它生成回来)
+
+
+            if (_transport != null && !_transport.IsHost)
+
+
+                DropItemSync.TickClient(_session);
+
+
+            
+
+
             ActionSync.Tick(_session);   // 行为:只在动作切换时发
 
 
@@ -336,6 +348,10 @@ namespace DolocCoop
             {
                 if (_transport != null && !_transport.IsHost) DropItemSync.ApplyRemote(drops);
             };
+            _session.DropPickupReceived += (from, picked) =>
+            {
+                if (_transport != null && _transport.IsHost) DropItemSync.HandlePickup(from, picked);
+            };
             _session.PeerActionReceived += (peer, state, ax, ay) => ActionSync.OnRemoteAction(peer, state, ax, ay);
             NetLog.Log($"会话已建立 transport={transport.GetType().Name} selfId={transport.SelfId}");
         }
@@ -373,6 +389,7 @@ namespace DolocCoop
         }
     }
 }
+
 
 
 
