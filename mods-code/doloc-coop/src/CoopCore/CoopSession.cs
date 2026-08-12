@@ -4,6 +4,13 @@ using System.IO;
 
 namespace CoopCore
 {
+    /// <summary>一个天气区域的当前状态。</summary>
+    public struct WeatherEntry
+    {
+        public string RegionId;
+        public int WeatherType;
+    }
+
     /// <summary>远端玩家的最新已知状态(游戏无关的通用字段)。</summary>
     public sealed class RemotePeer
     {
@@ -31,8 +38,8 @@ namespace CoopCore
         public event Action<RemotePeer> PeerLeft;
         public event Action<RemotePeer> PeerStateUpdated;
         public event Action<ulong, string> ChatReceived;
-        /// <summary>收到主机的权威时间(游戏内累计秒数)。</summary>
-        public event Action<int> TimeSyncReceived;
+        /// <summary>收到主机的世界状态:(游戏内累计秒数, 各区域天气)。</summary>
+        public event Action<int, List<WeatherEntry>> WorldSyncReceived;
         public event Action<string> Log;
 
         public CoopSession(ITransport transport, string modVersion)
@@ -66,10 +73,23 @@ namespace CoopCore
             _transport.Broadcast(data, data.Length, SendMode.Reliable);
         }
 
-        /// <summary>主机广播权威时间(游戏内累计秒数)。</summary>
-        public void SendTimeSync(int totalSeconds)
+        /// <summary>
+        /// 主机广播世界状态:游戏内累计秒数 + 各区域当前天气。
+        /// 天气用 (区域id, 天气枚举值) 列表表示,区域数量少,整包下发比做增量简单可靠。
+        /// </summary>
+        public void SendWorldSync(int totalSeconds, IList<WeatherEntry> weather)
         {
-            var data = MsgWriter.Frame(MsgType.TimeSync, bw => bw.Write(totalSeconds));
+            var data = MsgWriter.Frame(MsgType.WorldSync, bw =>
+            {
+                bw.Write(totalSeconds);
+                int n = weather?.Count ?? 0;
+                bw.Write((byte)Math.Min(n, 255));
+                for (int i = 0; i < n && i < 255; i++)
+                {
+                    bw.Write(weather[i].RegionId ?? "");
+                    bw.Write(weather[i].WeatherType);
+                }
+            });
             _transport.Broadcast(data, data.Length, SendMode.Reliable);
         }
 
@@ -156,9 +176,16 @@ namespace CoopCore
                     }
                     break;
 
-                case MsgType.TimeSync:
+                case MsgType.WorldSync:
                     using (var br = MsgWriter.Payload(data, length))
-                        TimeSyncReceived?.Invoke(br.ReadInt32());
+                    {
+                        int seconds = br.ReadInt32();
+                        int n = br.ReadByte();
+                        var weather = new List<WeatherEntry>(n);
+                        for (int i = 0; i < n; i++)
+                            weather.Add(new WeatherEntry { RegionId = br.ReadString(), WeatherType = br.ReadInt32() });
+                        WorldSyncReceived?.Invoke(seconds, weather);
+                    }
                     break;
 
                 case MsgType.Chat:

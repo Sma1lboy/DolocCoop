@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using DolocTown.Config.Weather;
 using UnityEngine;
 
 namespace DolocCoop
@@ -25,8 +27,13 @@ namespace DolocCoop
         /// <summary>单次纠正上限,防止异常数据把玩家甩到几年后。</summary>
         private const int MaxCorrection = 60 * 60 * 24 * 3;   // 3 游戏日
 
+        /// <summary>即使时间没变,也至少这么久发一次(游戏失焦会暂停时间)。</summary>
+        private const float HeartbeatInterval = 10f;
+
         private static float _timer;
         private static int _lastSent = -1;
+        private static float _lastSentAt = -999f;
+        private static bool _forceNextSend;
         private static int _corrections;
 
         public static void TickHost(CoopCore.CoopSession session)
@@ -35,10 +42,84 @@ namespace DolocCoop
             if (_timer < BroadcastInterval) return;
             _timer = 0f;
 
-            if (!TryGetLocalSeconds(out int now)) return;
-            if (now == _lastSent) return;      // 时间没走(暂停中)就别刷网络
+            if (!TryGetLocalSeconds(out int now))
+            {
+                NetLog.Sample("world-skip", 30, "WORLD_SKIP 未进存档,读不到时间");
+                return;
+            }
+
+            // 时间没变就不发 —— 但必须留一条心跳:游戏失焦时时间会暂停,
+            // 如果只在"时间变了"才发,刚进房的客机会永远等不到世界状态。
+            bool changed = now != _lastSent;
+            bool heartbeatDue = Time.unscaledTime - _lastSentAt >= HeartbeatInterval;
+            if (!changed && !heartbeatDue && !_forceNextSend) return;
+
             _lastSent = now;
-            session.SendTimeSync(now);
+            _lastSentAt = Time.unscaledTime;
+            _forceNextSend = false;
+
+            var weather = ReadLocalWeather();
+            session.SendWorldSync(now, weather);
+            NetLog.Sample("world-send", 5, $"WORLD_SEND time={now} regions={weather.Count} " +
+                                           $"reason={(changed ? "changed" : "heartbeat")}");
+        }
+
+        /// <summary>有新玩家进房时调用:下一帧立刻补发一次世界状态,别让人干等心跳。</summary>
+        public static void ForceSendNext()
+        {
+            _forceNextSend = true;
+            _timer = BroadcastInterval;   // 让下一次 TickHost 立即触发
+        }
+
+        // ---------- 天气 ----------
+
+        /// <summary>读出各天气区域的当前天气。区域数量很少,整包下发比做增量简单可靠。</summary>
+        public static List<CoopCore.WeatherEntry> ReadLocalWeather()
+        {
+            var list = new List<CoopCore.WeatherEntry>();
+            try
+            {
+                var cm = DolocAPI.archiveHandle?.timeData?.climateManager;
+                if (cm == null || cm.weatherSystems == null) return list;
+                foreach (var kv in cm.weatherSystems)
+                {
+                    var w = cm.GetCurrentWeather(kv.Key);
+                    list.Add(new CoopCore.WeatherEntry { RegionId = kv.Key, WeatherType = (int)w });
+                }
+            }
+            catch (Exception e) { Plugin.Log.LogWarning("[WorldSync] 读天气失败: " + e.Message); }
+            return list;
+        }
+
+        /// <summary>客机应用主机天气,只在不一致时才设置(SetWeather 会触发重渲染)。</summary>
+        public static void ApplyRemoteWeather(List<CoopCore.WeatherEntry> weather)
+        {
+            if (weather == null || weather.Count == 0) return;
+            try
+            {
+                var handle = DolocAPI.archiveHandle;
+                var cm = handle?.timeData?.climateManager;
+                if (handle == null || cm == null) return;
+
+                foreach (var entry in weather)
+                {
+                    if (string.IsNullOrEmpty(entry.RegionId)) continue;
+                    int local = (int)cm.GetCurrentWeather(entry.RegionId);
+                    if (local == entry.WeatherType) continue;
+
+                    handle.SetWeather(entry.RegionId, (WeatherType)entry.WeatherType, shouldRender: true);
+                    Plugin.Log.LogInfo($"[WorldSync] 天气校正 {entry.RegionId}: {(WeatherType)local} → {(WeatherType)entry.WeatherType}");
+                    NetLog.Log($"WEATHER_SET region={entry.RegionId} {local}->{entry.WeatherType}");
+                }
+            }
+            catch (Exception e) { Plugin.Log.LogWarning("[WorldSync] 应用天气失败: " + e.Message); }
+        }
+
+        /// <summary>面板用:当前所在区域的天气描述。</summary>
+        public static string DescribeWeather()
+        {
+            try { return DolocAPI.archiveHandle?.LocalWeatherType.ToString() ?? "?"; }
+            catch { return "?"; }
         }
 
         /// <summary>客机收到主机时间后的处理。</summary>
@@ -102,3 +183,4 @@ namespace DolocCoop
         }
     }
 }
+

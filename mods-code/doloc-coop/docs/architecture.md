@@ -61,3 +61,22 @@
 - 游戏更新击穿补丁 → Harmony 补丁集中列清单,启动时逐个 self-check(学 DTMAPI 的 Hook 状态页)
 - 版本不匹配联机 → 大厅 metadata 写 mod 版本 + 游戏 build 号,进房校验(鸭科夫 v1.3 的做法)
 - 工坊不能投放 DLL 到游戏目录 → 发布期用 Doloc Auto Mod Loader(3780218737)或自带安装 bat(学 DTMAPI)
+
+## 各类同步的接口摸底(2026-08-12)
+
+反编译确认的入口,供后续实现参考:
+
+| 同步项 | 读 | 写 | 状态 |
+|--------|-----|-----|------|
+| 时间 | `archiveHandle.timeData.totalSeconds` | `PassTimeNoControl` / `TrackBackTime` | ✅ 已实现并实测 |
+| 天气 | `timeData.climateManager.GetCurrentWeather(区域id)`,区域从 `weatherSystems` 枚举 | `archiveHandle.SetWeather(区域id, WeatherType, shouldRender)` | ✅ 已实现并实测(default/wetland/ruined_city 三区) |
+| 箱子 | `IContainer.inventory` (LinearInventory) | `IContainer.OverwriteInventory(IEnumerable<CountItem>)` | ⬜ 接口已找到,待实现 |
+| 行为 | `BodyController.StateManager.current`(AgentState*) | `agent.EnterState<T>()` | ⬜ 待实现 |
+| 任务 | `MissionManager` / `BoardMissionManager` | 待摸底 | ⬜ 待实现 |
+
+### 箱子同步的设计要点(待实现)
+
+- 容器要有稳定标识:同一个箱子在两端必须能对上。候选是"房间 id + 网格坐标"。
+- 主机权威:客机开箱只发意图,主机结算后广播整箱内容(`OverwriteInventory`)。
+  整箱覆盖比做增量简单得多,而箱子容量有限,带宽可接受。
+- 冲突场景:两人同时拿同一格。主机串行处理请求即可自然解决。

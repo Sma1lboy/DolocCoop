@@ -279,7 +279,13 @@ namespace DolocCoop
             _transport = transport;
             _session = new CoopSession(transport, Plugin.PluginVersion);
             _session.Log += s => { Plugin.Log.LogInfo("[Session] " + s); NetLog.Log("SESSION " + s); };
-            _session.PeerJoined += p => { Plugin.Log.LogInfo($"[Session] 玩家加入: {p.Id}"); NetLog.Log($"PEER_JOINED id={p.Id}"); };
+            _session.PeerJoined += p =>
+            {
+                Plugin.Log.LogInfo($"[Session] 玩家加入: {p.Id}");
+                NetLog.Log($"PEER_JOINED id={p.Id}");
+                // 新人进房立刻补发世界状态,不用等心跳
+                if (_transport != null && _transport.IsHost) TimeSync.ForceSendNext();
+            };
             _session.PeerLeft += p =>
             {
                 Plugin.Log.LogInfo($"[Session] 玩家离开: {p.Id}");
@@ -287,10 +293,14 @@ namespace DolocCoop
                 RemotePlayerRenderer.Remove(p.Id);
             };
             _session.ChatReceived += (id, text) => { Plugin.Log.LogInfo($"[Chat] {id}: {text}"); NetLog.Log($"CHAT from={id}: {text}"); };
-            _session.TimeSyncReceived += hostSeconds =>
+            _session.WorldSyncReceived += (hostSeconds, weather) =>
             {
-                NetLog.Sample(5, $"TIME_RECV host={hostSeconds}");
-                if (_transport != null && !_transport.IsHost) TimeSync.ApplyRemote(hostSeconds);
+                NetLog.Sample(5, $"WORLD_RECV time={hostSeconds} regions={weather.Count}");
+                if (_transport != null && !_transport.IsHost)
+                {
+                    TimeSync.ApplyRemote(hostSeconds);
+                    TimeSync.ApplyRemoteWeather(weather);
+                }
             };
             _session.PeerStateUpdated += p =>
             {
@@ -333,6 +343,8 @@ namespace DolocCoop
         }
     }
 }
+
+
 
 
 

@@ -40,8 +40,8 @@ namespace CoopSimClient
             var transport = new LoopbackTransport(s => Console.WriteLine("[Net] " + s));
             var session = new CoopSession(transport, "sim-0.1");
 
-            session.TimeSyncReceived += t =>
-                Console.WriteLine($"[时间] 收到主机时间 {t} 秒 (第 {t / 86400 + 1} 天 {(t % 86400) / 3600:00}:{(t % 3600) / 60:00})");
+            session.WorldSyncReceived += (t, weather) =>
+                Console.WriteLine($"[世界] 主机时间 {t} 秒 (第 {t / 86400 + 1} 天 {(t % 86400) / 3600:00}:{(t % 3600) / 60:00})，天气区域 {weather.Count} 个: {string.Join(", ", weather.ConvertAll(w => w.RegionId + "=" + w.WeatherType))}");
 
             // 跟随主机位置:收到对方状态后绕着他转,这样化身一定出现在画面里
             float hostX = 0f, hostY = 0f;
@@ -95,7 +95,7 @@ namespace CoopSimClient
                 // 主机模式:定期广播一个"假时间",用来验证客机(游戏)会不会跟着校时
                 if (asHost && tick % 30 == 0 && session.Peers.Count > 0)
                 {
-                    session.SendTimeSync(fakeTime);
+                    session.SendWorldSync(fakeTime, new System.Collections.Generic.List<CoopCore.WeatherEntry>());
                     if (tick % 150 == 0) Console.WriteLine($"    广播时间 {fakeTime} 秒");
                 }
 
@@ -114,3 +114,4 @@ namespace CoopSimClient
         }
     }
 }
+

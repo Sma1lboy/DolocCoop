@@ -42,12 +42,31 @@ namespace DolocCoop
             }
         }
 
-        /// <summary>高频事件采样记录(每 N 次记一条,避免刷爆文件)。</summary>
-        private static int _sampleCounter;
+        /// <summary>
+        /// 高频事件采样记录(每 N 次记一条,避免刷爆文件)。
+        /// 计数器按 key 分开 —— 用同一个全局计数器时,高频调用点会把低频调用点的
+        /// 采样位置挤掉,导致后者几乎永远不落盘(排查 WorldSync 时被坑过)。
+        /// </summary>
+        private static readonly System.Collections.Generic.Dictionary<string, int> Counters
+            = new System.Collections.Generic.Dictionary<string, int>();
 
+        public static void Sample(string key, int everyN, string line)
+        {
+            lock (Lock)
+            {
+                Counters.TryGetValue(key, out int n);
+                n++;
+                Counters[key] = n;
+                if (n % everyN != 0) return;
+            }
+            Log(line);
+        }
+
+        /// <summary>兼容旧调用:用调用内容的前缀当 key。</summary>
         public static void Sample(int everyN, string line)
         {
-            if (++_sampleCounter % everyN == 0) Log(line);
+            int sp = line.IndexOf(' ');
+            Sample(sp > 0 ? line.Substring(0, sp) : line, everyN, line);
         }
     }
 }
