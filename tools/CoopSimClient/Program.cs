@@ -34,8 +34,14 @@ namespace CoopSimClient
             Console.WriteLine("(Ctrl+C 退出)");
             Console.WriteLine();
 
+            bool asHost = Array.IndexOf(args, "--host-mode") >= 0;
+            int fakeTime = int.Parse(Arg(args, "--time", "0"));
+
             var transport = new LoopbackTransport(s => Console.WriteLine("[Net] " + s));
             var session = new CoopSession(transport, "sim-0.1");
+
+            session.TimeSyncReceived += t =>
+                Console.WriteLine($"[时间] 收到主机时间 {t} 秒 (第 {t / 86400 + 1} 天 {(t % 86400) / 3600:00}:{(t % 3600) / 60:00})");
 
             // 跟随主机位置:收到对方状态后绕着他转,这样化身一定出现在画面里
             float hostX = 0f, hostY = 0f;
@@ -54,7 +60,16 @@ namespace CoopSimClient
                 }
             };
 
-            transport.Connect(host, port);
+            if (asHost)
+            {
+                transport.StartHost(port);
+                Console.WriteLine($"[模式] 主机 —— 游戏应按 Ctrl+F6 接入。将广播假时间 {fakeTime} 秒。");
+            }
+            else
+            {
+                transport.Connect(host, port);
+                Console.WriteLine("[模式] 客机 —— 游戏应已按 F6 开主机。");
+            }
             session.SendProfile(name, "");
 
             float angle = 0f;
@@ -76,6 +91,13 @@ namespace CoopSimClient
 
                 // 动画哈希传 0 = 让对端用默认状态;真实同步时这里是游戏的 Animator 状态哈希
                 session.SendLocalState(x, y, faceLeft, 0, 0f);
+
+                // 主机模式:定期广播一个"假时间",用来验证客机(游戏)会不会跟着校时
+                if (asHost && tick % 30 == 0 && session.Peers.Count > 0)
+                {
+                    session.SendTimeSync(fakeTime);
+                    if (tick % 150 == 0) Console.WriteLine($"    广播时间 {fakeTime} 秒");
+                }
 
                 if (++tick % 150 == 0)
                     Console.WriteLine($"    发送中… 位置 ({x:F2}, {y:F2})  已知主机 ({hostX:F2}, {hostY:F2})  对端数 {session.Peers.Count}");

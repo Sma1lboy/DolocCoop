@@ -9,7 +9,8 @@ namespace CoopCore
     /// </summary>
     public static class Protocol
     {
-        public const ushort Version = 1;
+        // v2: 新增 TimeSync(主机权威时间)
+        public const ushort Version = 2;
     }
 
     public enum MsgType : byte
@@ -24,8 +25,8 @@ namespace CoopCore
         PlayerProfile = 11,  // 可靠,低频: 外观/帽子/名字
         Chat = 12,
 
-        // v1 预留
-        TimeWeather = 20,
+        TimeSync = 20,       // 主机→客机: 游戏内绝对时间(秒)
+        // 预留
         SceneChange = 21,
         SleepVote = 22,
     }

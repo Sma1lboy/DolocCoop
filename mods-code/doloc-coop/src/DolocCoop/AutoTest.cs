@@ -25,6 +25,7 @@ namespace DolocCoop
         private static Phase _phase = Phase.Idle;
         private static bool _checked;
         private static int _slot;
+        private static bool _asClient;
         private static float _phaseStart;
         private static float _deadline;
 
@@ -83,8 +84,16 @@ namespace DolocCoop
                 case Phase.StartHost:
                     if (Elapsed > 2f)
                     {
-                        Log("开启回环主机,等待模拟客机接入");
-                        CoopRuntime.StartLoopbackHostForTest();
+                        if (_asClient)
+                        {
+                            Log("以客机身份接入本机回环主机(模拟客机需先用 --host-mode 启动)");
+                            CoopRuntime.StartLoopbackClientForTest();
+                        }
+                        else
+                        {
+                            Log("开启回环主机,等待模拟客机接入");
+                            CoopRuntime.StartLoopbackHostForTest();
+                        }
                         _phase = Phase.Done;
                     }
                     break;
@@ -106,11 +115,14 @@ namespace DolocCoop
                     Path.Combine(Application.persistentDataPath, "DolocCoop-debug"), "autotest.flag");
                 if (!File.Exists(path)) return;
 
+                // 标记内容格式: "<存档位> [client]"   例如 "0" 或 "0 client"
                 string body = File.ReadAllText(path).Trim();
-                if (!int.TryParse(body, out _slot)) _slot = 0;
+                var parts = body.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 0 || !int.TryParse(parts[0], out _slot)) _slot = 0;
+                _asClient = parts.Length > 1 && parts[1].Equals("client", StringComparison.OrdinalIgnoreCase);
                 File.Delete(path);   // 一次性,避免下次启动又自动进游戏
 
-                Log($"检测到自测标记,目标存档位 {_slot}");
+                Log($"检测到自测标记,存档位 {_slot},角色 {(_asClient ? "客机" : "主机")}");
                 Goto(Phase.WaitInit, 120f);
             }
             catch (Exception e)

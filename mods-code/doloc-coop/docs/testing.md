@@ -84,3 +84,17 @@ Start-Process "steam://rungameid/2285550"
 关键行:`AUTOTEST 开启回环主机` → `PEER_JOINED` → `[Avatar] 已为 xx 构建化身` → `PEER_STATE`。
 
 **2026-08-12 实测结果**:全链路打通。
+
+## 时间同步测试(反向:游戏当客机)
+
+```powershell
+.\dev.ps1 -NoLaunch
+.\sim.ps1 -HostMode -Time 8000        # 模拟客机改当主机,广播假时间
+Set-Content "...\DolocCoop-debug\autotest.flag" "0 client" -NoNewline
+Start-Process "steam://rungameid/2285550"
+```
+
+**2026-08-12 实测**:
+- 合理偏差 → `TIME_CORRECT diff=7018 local=982 host=8000 count=1`,
+  之后持续 `TIME_RECV` 但不再校时(容差生效,不会反复抖动)✔
+- 极端偏差(50 游戏日)→ `TIME_REJECT diff=4319018`,安全阀拦截 ✔

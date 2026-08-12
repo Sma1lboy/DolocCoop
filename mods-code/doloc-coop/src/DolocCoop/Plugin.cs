@@ -115,6 +115,10 @@ namespace DolocCoop
                     _session.SendLocalState(x, y, faceLeft, animHash, animTime);
             }
 
+            // 主机权威:只有房主广播时间,客机被动跟随
+            if (_transport != null && _transport.IsHost)
+                TimeSync.TickHost(_session);
+
             RemotePlayerRenderer.Tick();
         }
 
@@ -151,6 +155,9 @@ namespace DolocCoop
                 sb.AppendLine("大厅: " + (_steam.IsInLobby ? _steam.LobbyIdText : "无"));
                 sb.AppendLine("身份: " + (_steam.IsHost ? "房主" : "客机"));
             }
+            sb.AppendLine("游戏时间: " + TimeSync.Describe() + (steam || _transport != null
+                ? (_transport.IsHost ? "  <size=13>(本机为时间权威)</size>" : "  <size=13>(跟随房主)</size>")
+                : ""));
             sb.AppendLine();
             sb.AppendLine("<b>成员 (" + _session.Peers.Count + ")</b>");
             if (_session.Peers.Count == 0) sb.AppendLine("  (还没有其他玩家加入)");
@@ -164,6 +171,7 @@ namespace DolocCoop
 
         /// <summary>供 AutoTest 无人值守调用:开回环主机(等价于按 F6)。</summary>
         public static void StartLoopbackHostForTest() => StartLoopback(asClient: false);
+        public static void StartLoopbackClientForTest() => StartLoopback(asClient: true);
 
         /// <summary>给面板用的好友列表(需要先有 SteamTransport;没有就临时建一个只为读好友)。</summary>
         public static List<SteamTransport.FriendInfo> GetFriends()
@@ -279,6 +287,11 @@ namespace DolocCoop
                 RemotePlayerRenderer.Remove(p.Id);
             };
             _session.ChatReceived += (id, text) => { Plugin.Log.LogInfo($"[Chat] {id}: {text}"); NetLog.Log($"CHAT from={id}: {text}"); };
+            _session.TimeSyncReceived += hostSeconds =>
+            {
+                NetLog.Sample(5, $"TIME_RECV host={hostSeconds}");
+                if (_transport != null && !_transport.IsHost) TimeSync.ApplyRemote(hostSeconds);
+            };
             _session.PeerStateUpdated += p =>
             {
                 NetLog.Sample(30, $"PEER_STATE id={p.Id} pos=({p.X:F2},{p.Y:F2}) faceLeft={p.FacingLeft} anim={p.AnimHash}");

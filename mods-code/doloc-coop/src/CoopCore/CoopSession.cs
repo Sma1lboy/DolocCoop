@@ -31,6 +31,8 @@ namespace CoopCore
         public event Action<RemotePeer> PeerLeft;
         public event Action<RemotePeer> PeerStateUpdated;
         public event Action<ulong, string> ChatReceived;
+        /// <summary>收到主机的权威时间(游戏内累计秒数)。</summary>
+        public event Action<int> TimeSyncReceived;
         public event Action<string> Log;
 
         public CoopSession(ITransport transport, string modVersion)
@@ -61,6 +63,13 @@ namespace CoopCore
             {
                 bw.Write(name ?? ""); bw.Write(hatId ?? "");
             });
+            _transport.Broadcast(data, data.Length, SendMode.Reliable);
+        }
+
+        /// <summary>主机广播权威时间(游戏内累计秒数)。</summary>
+        public void SendTimeSync(int totalSeconds)
+        {
+            var data = MsgWriter.Frame(MsgType.TimeSync, bw => bw.Write(totalSeconds));
             _transport.Broadcast(data, data.Length, SendMode.Reliable);
         }
 
@@ -145,6 +154,11 @@ namespace CoopCore
                         peer.HatId = br.ReadString();
                         PeerStateUpdated?.Invoke(peer);
                     }
+                    break;
+
+                case MsgType.TimeSync:
+                    using (var br = MsgWriter.Payload(data, length))
+                        TimeSyncReceived?.Invoke(br.ReadInt32());
                     break;
 
                 case MsgType.Chat:
