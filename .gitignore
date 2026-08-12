@@ -23,4 +23,6 @@ dist/
 # 密钥,绝不入库
 .env
 .env.*
+# 角色肖像原图:是否公开由用户决定,默认不入库
+mods/*/_IGNORE/portrait-src.png
 
