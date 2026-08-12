@@ -41,6 +41,10 @@ namespace CoopCoreTests
             PeerLeftClearsState();
             LoopbackDeliversMessages();
 
+            Console.WriteLine("\n-- 断线检测 --");
+            TimeoutDropsSilentPeer();
+            ActivityKeepsPeerAlive();
+
             Console.WriteLine("\n-- 握手校验 --");
             RejectsModVersionMismatch();
             RejectsGameVersionMismatch();
@@ -286,6 +290,50 @@ namespace CoopCoreTests
             {
                 host.Dispose(); client.Dispose();
             }
+        }
+
+        // ---------------- 断线检测 ----------------
+
+        /// <summary>长时间没消息的 peer 必须被判掉线,否则对方化身会永远僵在原地。</summary>
+        private static void TimeoutDropsSilentPeer()
+        {
+            var transport = new FakeTransport();
+            var session = new CoopSession(transport, BuildInfo.ModVersion) { PeerTimeoutSeconds = 0.2 };
+            bool left = false;
+            session.PeerLeft += _ => left = true;
+
+            transport.RaisePeerConnected(11);
+            transport.DeliverToSelf();               // 完成握手,peer 入表
+            bool joined = session.Peers.Count == 1;
+
+            Thread.Sleep(300);                        // 静默超过超时时间
+            session.Pump();
+
+            Check("超时判定掉线", joined && left && session.Peers.Count == 0,
+                  $"joined={joined} left={left} 剩余={session.Peers.Count}");
+        }
+
+        /// <summary>有消息往来的 peer 不能被误判掉线。</summary>
+        private static void ActivityKeepsPeerAlive()
+        {
+            var transport = new FakeTransport();
+            var session = new CoopSession(transport, BuildInfo.ModVersion) { PeerTimeoutSeconds = 0.4 };
+            bool left = false;
+            session.PeerLeft += _ => left = true;
+
+            transport.RaisePeerConnected(12);
+            transport.DeliverToSelf();
+
+            // 持续有消息:每次 Pump 前投递一个心跳
+            for (int i = 0; i < 6; i++)
+            {
+                Thread.Sleep(100);
+                transport.Inject(12, MsgWriter.Frame(MsgType.Heartbeat, null));
+                session.Pump();
+            }
+
+            Check("活跃 peer 不被误判", !left && session.Peers.Count == 1,
+                  $"left={left} 剩余={session.Peers.Count}");
         }
 
         // ---------------- 握手校验 ----------------

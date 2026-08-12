@@ -24,6 +24,7 @@ namespace CoopCore
         Hello = 1,           // 客机→主机: mod 版本/协议版本/昵称
         HelloAck = 2,        // 主机→客机: 接受/拒绝(版本不符)
         Disconnect = 3,
+        Heartbeat = 4,       // 双向: 空包,只为证明"我还在"
 
         // v0: 玩家同步
         PlayerState = 10,    // 不可靠,高频: 位置/朝向/动画状态

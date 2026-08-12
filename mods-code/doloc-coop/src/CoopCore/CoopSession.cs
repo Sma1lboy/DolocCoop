@@ -85,7 +85,59 @@ namespace CoopCore
             _transport.MessageReceived += OnMessage;
         }
 
-        public void Pump() => _transport.Pump();
+        /// <summary>多久没收到任何消息就判定对方掉线(秒)。</summary>
+        public double PeerTimeoutSeconds { get; set; } = 10;
+
+        /// <summary>心跳间隔(秒)。必须明显小于超时,否则会误判。</summary>
+        public double HeartbeatSeconds { get; set; } = 2;
+
+        private DateTime _lastHeartbeatAt = DateTime.MinValue;
+
+        public void Pump()
+        {
+            _transport.Pump();
+            var now = DateTime.UtcNow;
+            SendHeartbeatIfDue(now);
+            DropTimedOutPeers(now);
+        }
+
+        /// <summary>
+        /// 定时发一个空包。
+        /// 不能只靠位置包来判断存活:玩家在标题界面、加载中、或者干脆没进存档时
+        /// 根本不发位置,那会被误判成掉线。心跳与游戏状态无关,永远在跳。
+        /// </summary>
+        private void SendHeartbeatIfDue(DateTime now)
+        {
+            if ((now - _lastHeartbeatAt).TotalSeconds < HeartbeatSeconds) return;
+            _lastHeartbeatAt = now;
+            var data = MsgWriter.Frame(MsgType.Heartbeat, null);
+            _transport.Broadcast(data, data.Length, SendMode.Unreliable);
+        }
+
+        /// <summary>
+        /// 清掉长时间没消息的 peer。
+        /// 回环传输没有底层断线感知,Steam 的 P2P 也不保证一定回调,
+        /// 所以超时判定是唯一可靠的兜底 —— 否则对方的化身会永远僵在原地。
+        /// </summary>
+        private void DropTimedOutPeers(DateTime now)
+        {
+            List<ulong> dead = null;
+            foreach (var kv in Peers)
+            {
+                if ((now - kv.Value.LastSeenUtc).TotalSeconds <= PeerTimeoutSeconds) continue;
+                (dead ??= new List<ulong>()).Add(kv.Key);
+            }
+            if (dead == null) return;
+
+            foreach (var id in dead)
+            {
+                var peer = Peers[id];
+                Peers.Remove(id);
+                _announced.Remove(id);
+                Log?.Invoke($"peer {id} 超过 {PeerTimeoutSeconds:F0} 秒无消息,判定掉线");
+                PeerLeft?.Invoke(peer);
+            }
+        }
 
         // ---- 发送 ----
 
@@ -262,8 +314,15 @@ namespace CoopCore
 
         private void OnMessage(ulong from, byte[] data, int length)
         {
+            // 收到任何消息都算"对方还活着" —— 超时判定靠这个时间戳。
+            // 只在已握手的 peer 上刷新,免得没通过校验的连接也被当成活着。
+            if (Peers.TryGetValue(from, out var alive)) alive.LastSeenUtc = DateTime.UtcNow;
+
             switch (MsgWriter.ReadType(data))
             {
+                case MsgType.Heartbeat:
+                    break;   // 时间戳已在上面刷新,没有别的事要做
+
                 case MsgType.Hello:
                     using (var br = MsgWriter.Payload(data, length))
                     {
