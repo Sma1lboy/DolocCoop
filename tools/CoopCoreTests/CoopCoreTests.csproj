@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <AssemblyName>CoopCoreTests</AssemblyName>
+    <RootNamespace>CoopCoreTests</RootNamespace>
+    <!-- 刻意不引第三方测试框架:这套测试要能在任何机器上 dotnet run 就跑,
+         不依赖 NuGet 还原,也不需要 IDE 插件 -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\mods-code\doloc-coop\src\CoopCore\CoopCore.csproj" />
+  </ItemGroup>
+</Project>

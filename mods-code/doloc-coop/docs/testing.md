@@ -98,3 +98,4 @@ Start-Process "steam://rungameid/2285550"
 - 合理偏差 → `TIME_CORRECT diff=7018 local=982 host=8000 count=1`,
   之后持续 `TIME_RECV` 但不再校时(容差生效,不会反复抖动)✔
 - 极端偏差(50 游戏日)→ `TIME_REJECT diff=4319018`,安全阀拦截 ✔
+

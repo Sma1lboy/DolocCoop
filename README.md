@@ -24,6 +24,7 @@
 .\dev.ps1              # 编译 + 部署 + 启动游戏
 .\dev.ps1 -NoLaunch    # 只编译部署
 .\sim.ps1              # 启动模拟客机(单机测联机,见下)
+.\test.ps1             # 跑 CoopCore 自动化测试(纯逻辑,不需要游戏)
 ```
 
 游戏路径默认 `C:\Program Files (x86)\Steam\steamapps\common\Doloc Town`,
@@ -86,6 +87,7 @@
 ## 许可
 
 MIT(见 LICENSE)。注意:本仓库不包含任何游戏本体资源或反编译代码。
+
 
 
 
