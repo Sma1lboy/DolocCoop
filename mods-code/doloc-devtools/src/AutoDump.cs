@@ -53,6 +53,8 @@ namespace DolocDevTools
             {
                 _stateDumpAt = -1f;
                 DebugDump.DumpGameState();
+
+                DebugDump.DumpContainerEquipments();   // 找可用于测试的容器设备
             }
         }
 
@@ -63,3 +65,4 @@ namespace DolocDevTools
         }
     }
 }
+

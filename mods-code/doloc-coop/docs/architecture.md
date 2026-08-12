@@ -221,3 +221,27 @@ Steam 那条路径没法本地端到端测,只能靠走查。查出四个**只�
    静默丢包会让"对方状态卡住"变成无从下手的怪现象,现在会记日志。
 
 另外 Broadcast 改成倒序遍历副本 —— 发送过程中回调可能改动 _peers(有人进/退大厅)。
+
+### 箱子同步终于打通(2026-08-12)
+
+卡了很多轮的"存档里没箱子所以验不了",最后用**临时放箱子**解开:
+自测流程先强制开启存档保护(所有写盘被拦),再用
+`((IEquipmentHost)room).CreateEquipment(...)` 放一个 `wooden_case`。
+箱子只存在于内存,退出即消失,玩家存档全程哈希不变。
+
+打通过程中修掉两个真 bug:
+
+1. **整类设备容器被漏扫**。原来只用 `FindObjectsOfType<MonoBehaviour>()`,
+   但 `Equipment` 继承 `TerrainContent`,是纯数据对象、根本不挂在 GameObject 上 ——
+   木箱、柜子、鱼缸、孵化器全都扫不到。放了箱子后 `CONTAINER_SCAN` 仍是 0 才发现。
+   现在同时扫 `room.DM_equipment.AllEquipments`。
+
+2. **覆盖时丢失格位,导致每轮重写**。原来用 `OverwriteInventory(IEnumerable<CountItem>)`
+   并过滤掉空格,物品会被压缩到前面,第 3 格的石头跑到第 2 格,
+   本地布局永远和主机对不上 → 指纹不等 → 每轮重写一遍,界面不停重绘。
+   改用 `OverwriteInventory(Item[])`,空格用 null 占位。
+
+还加了 `CONTAINER_SLOT_MISMATCH` 诊断:两端容量认知不同时(比如一方装了扩容 Mod)
+覆盖也对不齐,会陷入重写循环 —— 记一条日志,别闷头刷。
+
+最终实测:`CONTAINER_APPLY id=Case#2 slots=20 total=1`,**只应用一次**,存档未变。

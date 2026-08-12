@@ -105,19 +105,33 @@ namespace DolocCoop
                     matched++;
 
                     // 本地已经一致就别覆盖 —— OverwriteInventory 会触发 UI 重绘
-                    string localSig = Signature(Read(target, st.Id));
+                    var localState = Read(target, st.Id);
+                    string localSig = Signature(localState);
                     string remoteSig = Signature(st);
                     if (localSig == remoteSig) continue;
 
-                    var items = new List<CountItem>();
-                    foreach (var s in st.Slots)
+                    // 格数不一致说明两端对这个容器的容量认知不同(比如一方装了扩容 Mod),
+                    // 这种情况覆盖了也对不齐,会陷入每轮重写。记一条,别闷头刷。
+                    if (localState.Slots.Count != st.Slots.Count)
+                        NetLog.Sample($"slotmismatch-{st.Id}", 10,
+                            $"CONTAINER_SLOT_MISMATCH id={st.Id} 本地={localState.Slots.Count} 对方={st.Slots.Count}");
+
+                    // 必须保留**格位**,不能只传非空物品。
+                    //
+                    // 用 CountItem 那个重载会把物品压缩到前面,第 3 格的石头会跑到第 2 格,
+                    // 于是本地布局永远和主机对不上 —— 指纹一直不等,每轮都重写一遍,
+                    // 界面跟着不停重绘。实测时看到 CONTAINER_APPLY 计数一路涨才发现。
+                    // Item[] 重载支持用 null 表示空格,布局才能真正一致。
+                    var items = new Item[st.Slots.Count];
+                    for (int i = 0; i < st.Slots.Count; i++)
                     {
-                        if (string.IsNullOrEmpty(s.ItemName) || s.Count <= 0) continue;
-                        items.Add(new CountItem(s.ItemName, s.Count));
+                        var s = st.Slots[i];
+                        if (string.IsNullOrEmpty(s.ItemName) || s.Count <= 0) { items[i] = null; continue; }
+                        items[i] = ItemFactory.GenerateItem(s.ItemName, s.Count, out var item) ? item : null;
                     }
                     target.OverwriteInventory(items);
                     _applied++;
-                    NetLog.Log($"CONTAINER_APPLY id={st.Id} slots={items.Count} total={_applied}");
+                    NetLog.Log($"CONTAINER_APPLY id={st.Id} slots={items.Length} total={_applied}");
                 }
 
                 NetLog.Log($"CONTAINER_RECV got={states.Count} matched={matched} skipped={skipped} 场景容器={byId.Count}");
@@ -140,6 +154,9 @@ namespace DolocCoop
         private static List<IContainer> FindContainers()
         {
             var result = new List<IContainer>();
+
+            // 来源一:场景里的 MonoBehaviour 容器 —— 储物箱 / 祭坛 / 宝箱
+            // (它们是 InteractableObject,确实挂在 GameObject 上)
             try
             {
                 var all = UnityEngine.Object.FindObjectsOfType<MonoBehaviour>();
@@ -151,6 +168,23 @@ namespace DolocCoop
                 }
             }
             catch { }
+
+            // 来源二:房间的设备数据 —— 木箱 / 柜子 / 鱼缸 / 孵化器…
+            //
+            // **这一条是补的关键**:Equipment 继承 TerrainContent,是纯数据对象,
+            // 根本不挂在 GameObject 上,FindObjectsOfType 一个也扫不到。
+            // 实测放了一个木箱后 CONTAINER_SCAN 仍然是 0,才发现整类设备容器被漏掉了。
+            try
+            {
+                var room = DolocAPI.archiveHandle?.currentRoom;
+                if (room?.DM_equipment != null)
+                {
+                    foreach (var eq in room.DM_equipment.AllEquipments)
+                        if (eq is IContainer c) result.Add(c);
+                }
+            }
+            catch { }
+
             return result;
         }
 
@@ -162,14 +196,18 @@ namespace DolocCoop
         {
             try
             {
-                var mb = c as MonoBehaviour;
-                if (mb == null) return null;
-
                 // InteractableObject 自带 guid,是最稳的跨端标识
                 if (c is InteractableObject io && !string.IsNullOrEmpty(io.guid))
                     return io.guid;
 
-                // 其余(设备类)用「类型@网格坐标」兜底 —— 同一份存档里位置固定
+                // 设备类:用「类型@锚点」。Equipment 不是 MonoBehaviour,没有 transform,
+                // 但它有 anchor(网格坐标),在同一份存档里是稳定的。
+                if (c is Equipment eq)
+                    return $"{eq.GetType().Name}#{eq.id}";
+
+                // 其余挂在 GameObject 上的,用「类型@取整世界坐标」兜底
+                var mb = c as MonoBehaviour;
+                if (mb == null) return null;
                 var p = mb.transform.position;
                 return $"{mb.GetType().Name}@{Mathf.RoundToInt(p.x)},{Mathf.RoundToInt(p.y)}";
             }
@@ -199,5 +237,6 @@ namespace DolocCoop
         public static int TrackedCount => LastSignature.Count;
     }
 }
+
 
 

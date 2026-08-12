@@ -20,12 +20,13 @@ namespace DolocCoop
     /// </summary>
     internal static class AutoTest
     {
-        private enum Phase { Idle, WaitInit, Loading, WaitAgent, StartHost, ProbeSave, Done }
+        private enum Phase { Idle, WaitInit, Loading, WaitAgent, PlaceBox, StartHost, ProbeSave, Done }
 
         private static Phase _phase = Phase.Idle;
         private static bool _checked;
         private static int _slot;
         private static bool _asClient;
+        private static bool _placeBox;
         private static float _phaseStart;
         private static float _deadline;
 
@@ -77,6 +78,25 @@ namespace DolocCoop
                     if (AgentReady())
                     {
                         Log("玩家实体已就绪");
+                        if (_placeBox)
+                        {
+                            // 放箱子前先把存档锁死 —— 宁可多锁,也不能让测试用的箱子写进玩家存档
+                            SaveGuard.SetClient(true);
+                            Log("已强制开启存档保护(放测试箱子前的安全措施)");
+                            Goto(Phase.PlaceBox, 15f);
+                        }
+                        else Goto(Phase.StartHost, 10f);
+                    }
+                    break;
+
+                case Phase.PlaceBox:
+                    // 临时放一个木箱,专门用来验证箱子同步 —— 开局存档里一个容器都没有。
+                    //
+                    // **安全前提**:进入这个阶段前已强制开启存档保护,所有写盘都会被拦,
+                    // 所以这个箱子只存在于内存里,退出游戏就没了,玩家存档不受影响。
+                    if (Elapsed > 1f)
+                    {
+                        PlaceTestContainer();
                         Goto(Phase.StartHost, 10f);
                     }
                     break;
@@ -141,15 +161,50 @@ namespace DolocCoop
                 string body = File.ReadAllText(path).Trim();
                 var parts = body.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
                 if (parts.Length == 0 || !int.TryParse(parts[0], out _slot)) _slot = 0;
-                _asClient = parts.Length > 1 && parts[1].Equals("client", StringComparison.OrdinalIgnoreCase);
+                _asClient = false; _placeBox = false;
+                for (int i = 1; i < parts.Length; i++)
+                {
+                    if (parts[i].Equals("client", StringComparison.OrdinalIgnoreCase)) _asClient = true;
+                    if (parts[i].Equals("box", StringComparison.OrdinalIgnoreCase)) _placeBox = true;
+                }
                 File.Delete(path);   // 一次性,避免下次启动又自动进游戏
 
-                Log($"检测到自测标记,存档位 {_slot},角色 {(_asClient ? "客机" : "主机")}");
+                Log($"检测到自测标记,存档位 {_slot},角色 {(_asClient ? "客机" : "主机")}{(_placeBox ? ",放测试箱子" : "")}");
                 Goto(Phase.WaitInit, 120f);
             }
             catch (Exception e)
             {
                 Plugin.Log.LogWarning("[AutoTest] 读取标记失败: " + e.Message);
+            }
+        }
+
+        /// <summary>
+        /// 在玩家脚边放一个木箱(wooden_case,EquipmentFuncCase → 实现 IContainer)。
+        /// 只用于自测,依赖调用前已开启存档保护。
+        /// </summary>
+        private static void PlaceTestContainer()
+        {
+            try
+            {
+                var agent = DolocAPI.agent;
+                var room = DolocAPI.archiveHandle?.currentRoom;
+                if (agent == null || room == null) { Log("放箱子失败:玩家或房间为空"); return; }
+
+                var proto = DolocTown.Config.DolocConfig.Tables.TbEquipment.GetOrDefault("wooden_case");
+                if (proto == null) { Log("放箱子失败:配置表里没有 wooden_case"); return; }
+
+                var p = agent.transform.position;
+                var wp = new Vector3(p.x + 2f, p.y, p.z);
+                var anchor = new Vector2Int(Mathf.RoundToInt(wp.x), Mathf.RoundToInt(wp.y));
+
+                var eq = ((DolocTown.IEquipmentHost)room).CreateEquipment(wp, anchor, proto, false);   // 是接口默认方法,要显式转型
+                Log(eq != null
+                    ? $"已放置测试木箱于 ({wp.x:F1},{wp.y:F1})"
+                    : "放箱子失败:CreateEquipment 返回 null(位置可能不合法)");
+            }
+            catch (Exception e)
+            {
+                Log("放箱子异常: " + e.Message);
             }
         }
 
@@ -175,3 +230,5 @@ namespace DolocCoop
         }
     }
 }
+
+

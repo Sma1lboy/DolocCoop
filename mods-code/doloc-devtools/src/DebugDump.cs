@@ -204,6 +204,58 @@ namespace DolocDevTools
             Write("game-state", sb.ToString());
         }
 
+        /// <summary>
+        /// 导出所有"能装东西"的设备 id。
+        /// 用途:验证箱子同步需要场景里真有容器,而开局存档一个都没有;
+        /// 有了这份清单就能在测试时临时放一个(全程开着存档保护,不落盘)。
+        /// </summary>
+        public static void DumpContainerEquipments()
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("=== 可作为容器的设备 ===");
+            sb.AppendLine($"时间: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+            sb.AppendLine();
+
+            try
+            {
+                var table = DolocTown.Config.DolocConfig.Tables.TbEquipment;
+                var list = table.DataList;
+                sb.AppendLine($"设备总数: {list.Count}");
+                sb.AppendLine();
+
+                int found = 0;
+                foreach (var info in list)
+                {
+                    string fn = "";
+                    try { fn = info.Function?.GetType().Name ?? ""; } catch { }
+
+                    // 名字里带这些关键字的多半是容器类
+                    string lower = (info.Id ?? "").ToLowerInvariant();
+                    bool looksLikeContainer =
+                        fn.IndexOf("Container", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        fn.IndexOf("Case", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        fn.IndexOf("Tank", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        fn.IndexOf("Incubator", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        fn.IndexOf("Synthesizer", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        fn.IndexOf("Shredder", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        lower.Contains("box") || lower.Contains("case") || lower.Contains("storage") ||
+                        lower.Contains("tank") || lower.Contains("shelf");
+
+                    if (!looksLikeContainer) continue;
+                    found++;
+                    sb.AppendLine($"{info.Id}    function={fn}    菜单={info.MenuType}");
+                }
+                sb.AppendLine();
+                sb.AppendLine($"疑似容器设备: {found} 个");
+            }
+            catch (Exception e)
+            {
+                sb.AppendLine("读取失败: " + e);
+            }
+
+            Write("container-equipments", sb.ToString());
+        }
+
         private static string[] Names(AnimationClip[] clips, int max)
         {
             int n = Mathf.Min(clips.Length, max);

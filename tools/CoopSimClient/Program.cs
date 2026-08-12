@@ -129,13 +129,8 @@ namespace CoopSimClient
                     {
                         new ContainerState
                         {
-                            Id = "SIM_FAKE_BOX",
-                            Slots = new System.Collections.Generic.List<SlotItem>
-                            {
-                                new SlotItem { ItemName = "wood", Count = 7 },
-                                new SlotItem { ItemName = "", Count = 0 },
-                                new SlotItem { ItemName = "stone", Count = 3 },
-                            }
+                            Id = Arg(args, "--container-id", "SIM_FAKE_BOX"),   // 指向真实箱子可验证写入路径
+                            Slots = BuildSlots(int.Parse(Arg(args, "--slots", "3")))
                         }
                     });
                     if (tick % 150 == 0) Console.WriteLine($"    广播时间 {fakeTime} 秒");
@@ -148,6 +143,22 @@ namespace CoopSimClient
             }
         }
 
+        /// <summary>
+        /// 造一箱内容。格数必须和对端容器的真实容量一致 ——
+        /// 格数对不上会让两端指纹永远不等,客机每轮重写一遍(实测木箱是 20 格)。
+        /// </summary>
+        private static System.Collections.Generic.List<SlotItem> BuildSlots(int count)
+        {
+            var slots = new System.Collections.Generic.List<SlotItem>();
+            for (int i = 0; i < count; i++)
+            {
+                if (i == 0) slots.Add(new SlotItem { ItemName = "wood", Count = 7 });
+                else if (i == 2) slots.Add(new SlotItem { ItemName = "stone", Count = 3 });
+                else slots.Add(new SlotItem { ItemName = "", Count = 0 });
+            }
+            return slots;
+        }
+
         private static string Arg(string[] args, string key, string fallback)
         {
             for (int i = 0; i < args.Length - 1; i++)
@@ -156,6 +167,7 @@ namespace CoopSimClient
         }
     }
 }
+
 
 
 
