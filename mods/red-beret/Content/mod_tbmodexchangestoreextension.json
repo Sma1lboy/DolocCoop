@@ -1,0 +1,21 @@
+[
+  {
+    "id": "phone_booth_exchange_shop",
+    "extra_items": [
+      {
+        "ranged_item": {
+          "item_name": "jax_beret",
+          "min_count": 1,
+          "max_count": 1
+        },
+        "storage": 0,
+        "gold_cost": 300,
+        "item_costs": [],
+        "pre_condition_item_name": "",
+        "pre_condition_item_count": 0,
+        "tech_point": 1,
+        "default_unlock": true
+      }
+    ]
+  }
+]

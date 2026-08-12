@@ -1,0 +1,26 @@
+[
+  {
+    "id": "jax_beret",
+    "skill": "",
+    "defense": 0,
+    "idle_sprite": {
+      "url": "anim_hat_jax_beret_idle_0"
+    },
+    "climb_sprite": {
+      "url": "anim_hat_jax_beret_climb_0"
+    },
+    "preview": {
+      "url": "preview_hat_jax_beret"
+    },
+    "animator": {
+      "url": ""
+    },
+    "material": {
+      "url": ""
+    },
+    "prefab": {
+      "url": ""
+    },
+    "hide_hair": false
+  }
+]

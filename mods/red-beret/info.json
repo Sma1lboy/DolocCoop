@@ -1,0 +1,17 @@
+{
+  "name": "Red Beret",
+  "author": "sma1lboy",
+  "version": "1.0.0",
+  "description": "A bright red beret for your town walks.",
+  "tags": ["Headwear"],
+  "localized_name": {
+    "schinese": "红色贝雷帽",
+    "tchinese": "紅色貝雷帽",
+    "english": "Red Beret"
+  },
+  "localized_description": {
+    "schinese": "一顶亮眼的红色贝雷帽,在电话亭兑换部有售。",
+    "tchinese": "一頂亮眼的紅色貝雷帽,在電話亭兌換部有售。",
+    "english": "A bright red beret. Available at the phone booth exchange shop."
+  }
+}

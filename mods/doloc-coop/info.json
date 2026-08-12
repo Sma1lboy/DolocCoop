@@ -1,0 +1,17 @@
+{
+  "name": "DolocCoop - Steam Multiplayer",
+  "author": "sma1lboy",
+  "version": "0.1.0",
+  "description": "Steam-based co-op multiplayer for Doloc Town. Host a lobby (F9), invite friends (F10), and farm together. Requires BepInEx. Alpha - back up your saves.",
+  "tags": ["Multiplayer", "Coop", "Functional Mod"],
+  "localized_name": {
+    "schinese": "多洛可联机 DolocCoop",
+    "tchinese": "多洛可聯機 DolocCoop",
+    "english": "DolocCoop - Steam Multiplayer"
+  },
+  "localized_description": {
+    "schinese": "基于 Steam 的多人联机模组。F9 创建大厅,F10 邀请好友,一起经营小镇。需要 BepInEx 前置。开发中版本,请务必备份存档。",
+    "tchinese": "基於 Steam 的多人聯機模組。F9 建立大廳,F10 邀請好友,一起經營小鎮。需要 BepInEx 前置。開發中版本,請務必備份存檔。",
+    "english": "Steam-based co-op multiplayer for Doloc Town. Host a lobby (F9), invite friends (F10), and farm together. Requires BepInEx. Alpha - back up your saves."
+  }
+}

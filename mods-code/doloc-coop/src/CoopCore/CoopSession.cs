@@ -1,0 +1,170 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+
+namespace CoopCore
+{
+    /// <summary>远端玩家的最新已知状态(游戏无关的通用字段)。</summary>
+    public sealed class RemotePeer
+    {
+        public ulong Id;
+        public string Name = "";
+        public float X, Y;
+        public bool FacingLeft;
+        public int AnimHash;        // Animator 状态 shortNameHash(同一 controller 跨端一致)
+        public float AnimTime;      // normalizedTime,用于新状态起播对齐
+        public string HatId = "";
+        public DateTime LastSeenUtc;
+    }
+
+    /// <summary>
+    /// 主机权威会话:维护 peer 表、处理 Hello 握手与版本校验、
+    /// 分发消息。游戏侧只需要喂 ITransport 和自己每帧的本地玩家状态。
+    /// </summary>
+    public sealed class CoopSession : IDisposable
+    {
+        private readonly ITransport _transport;
+        private readonly string _modVersion;
+        public readonly Dictionary<ulong, RemotePeer> Peers = new Dictionary<ulong, RemotePeer>();
+
+        public event Action<RemotePeer> PeerJoined;
+        public event Action<RemotePeer> PeerLeft;
+        public event Action<RemotePeer> PeerStateUpdated;
+        public event Action<ulong, string> ChatReceived;
+        public event Action<string> Log;
+
+        public CoopSession(ITransport transport, string modVersion)
+        {
+            _transport = transport;
+            _modVersion = modVersion;
+            _transport.PeerConnected += OnPeerConnected;
+            _transport.PeerDisconnected += OnPeerDisconnected;
+            _transport.MessageReceived += OnMessage;
+        }
+
+        public void Pump() => _transport.Pump();
+
+        // ---- 发送 ----
+
+        public void SendLocalState(float x, float y, bool facingLeft, int animHash, float animTime)
+        {
+            var data = MsgWriter.Frame(MsgType.PlayerState, bw =>
+            {
+                bw.Write(x); bw.Write(y); bw.Write(facingLeft); bw.Write(animHash); bw.Write(animTime);
+            });
+            _transport.Broadcast(data, data.Length, SendMode.Unreliable);
+        }
+
+        public void SendProfile(string name, string hatId)
+        {
+            var data = MsgWriter.Frame(MsgType.PlayerProfile, bw =>
+            {
+                bw.Write(name ?? ""); bw.Write(hatId ?? "");
+            });
+            _transport.Broadcast(data, data.Length, SendMode.Reliable);
+        }
+
+        public void SendChat(string text)
+        {
+            var data = MsgWriter.Frame(MsgType.Chat, bw => bw.Write(text ?? ""));
+            _transport.Broadcast(data, data.Length, SendMode.Reliable);
+        }
+
+        // ---- 接收 ----
+
+        private void OnPeerConnected(ulong id)
+        {
+            var data = MsgWriter.Frame(MsgType.Hello, bw =>
+            {
+                bw.Write(Protocol.Version); bw.Write(_modVersion);
+            });
+            _transport.Send(id, data, data.Length, SendMode.Reliable);
+        }
+
+        private void OnPeerDisconnected(ulong id)
+        {
+            if (Peers.TryGetValue(id, out var peer))
+            {
+                Peers.Remove(id);
+                PeerLeft?.Invoke(peer);
+            }
+        }
+
+        private void OnMessage(ulong from, byte[] data, int length)
+        {
+            switch (MsgWriter.ReadType(data))
+            {
+                case MsgType.Hello:
+                    using (var br = MsgWriter.Payload(data, length))
+                    {
+                        ushort ver = br.ReadUInt16();
+                        string modVer = br.ReadString();
+                        if (ver != Protocol.Version)
+                        {
+                            Log?.Invoke($"peer {from} 协议版本不匹配 (本地 {Protocol.Version} vs {ver}/{modVer})");
+                            var nack = MsgWriter.Frame(MsgType.HelloAck, bw => { bw.Write(false); bw.Write(Protocol.Version); });
+                            _transport.Send(from, nack, nack.Length, SendMode.Reliable);
+                            return;
+                        }
+                        var peer = GetOrAdd(from);
+                        var ack = MsgWriter.Frame(MsgType.HelloAck, bw => { bw.Write(true); bw.Write(Protocol.Version); });
+                        _transport.Send(from, ack, ack.Length, SendMode.Reliable);
+                        PeerJoined?.Invoke(peer);
+                    }
+                    break;
+
+                case MsgType.HelloAck:
+                    using (var br = MsgWriter.Payload(data, length))
+                    {
+                        bool ok = br.ReadBoolean();
+                        Log?.Invoke(ok ? $"peer {from} 握手成功" : $"peer {from} 拒绝: 版本不匹配");
+                        if (ok) PeerJoined?.Invoke(GetOrAdd(from));
+                    }
+                    break;
+
+                case MsgType.PlayerState:
+                    using (var br = MsgWriter.Payload(data, length))
+                    {
+                        var peer = GetOrAdd(from);
+                        peer.X = br.ReadSingle();
+                        peer.Y = br.ReadSingle();
+                        peer.FacingLeft = br.ReadBoolean();
+                        peer.AnimHash = br.ReadInt32();
+                        peer.AnimTime = br.ReadSingle();
+                        peer.LastSeenUtc = DateTime.UtcNow;
+                        PeerStateUpdated?.Invoke(peer);
+                    }
+                    break;
+
+                case MsgType.PlayerProfile:
+                    using (var br = MsgWriter.Payload(data, length))
+                    {
+                        var peer = GetOrAdd(from);
+                        peer.Name = br.ReadString();
+                        peer.HatId = br.ReadString();
+                        PeerStateUpdated?.Invoke(peer);
+                    }
+                    break;
+
+                case MsgType.Chat:
+                    using (var br = MsgWriter.Payload(data, length))
+                        ChatReceived?.Invoke(from, br.ReadString());
+                    break;
+            }
+        }
+
+        private RemotePeer GetOrAdd(ulong id)
+        {
+            if (!Peers.TryGetValue(id, out var peer))
+                Peers[id] = peer = new RemotePeer { Id = id, LastSeenUtc = DateTime.UtcNow };
+            return peer;
+        }
+
+        public void Dispose()
+        {
+            _transport.PeerConnected -= OnPeerConnected;
+            _transport.PeerDisconnected -= OnPeerDisconnected;
+            _transport.MessageReceived -= OnMessage;
+        }
+    }
+}

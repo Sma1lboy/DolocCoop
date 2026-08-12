@@ -1,0 +1,17 @@
+{
+  "name": "My First Hat",
+  "author": "sma1lboy",
+  "version": "1.0.0",
+  "description": "A custom static hat mod template.",
+  "tags": ["Headwear"],
+  "localized_name": {
+    "schinese": "我的第一顶帽子",
+    "tchinese": "我的第一頂帽子",
+    "english": ""
+  },
+  "localized_description": {
+    "schinese": "静态帽子模组模板。",
+    "tchinese": "靜態帽子模組模板。",
+    "english": ""
+  }
+}

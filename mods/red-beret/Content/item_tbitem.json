@@ -1,0 +1,31 @@
+[
+  {
+    "id": "jax_beret",
+    "sub_type": "kit_hat",
+    "salable": true,
+    "disposable": true,
+    "consumable": false,
+    "cookable": false,
+    "electric_energy": 0,
+    "viewable": false,
+    "source": [],
+    "selling_price": 150,
+    "buying_price": 300,
+    "overlay": 1,
+    "ui_sprite_asset": {
+      "url": "icon_item_jax_beret"
+    },
+    "title": {
+      "key": "item_jax_beret",
+      "text": "红色贝雷帽"
+    },
+    "description_basic": {
+      "key": "item_jax_beret_desc",
+      "text": "一顶亮眼的红色贝雷帽,戴上它去小镇散步吧。"
+    },
+    "function": {
+      "$type": "ItemFunctionHat",
+      "hat_id": "jax_beret"
+    }
+  }
+]
