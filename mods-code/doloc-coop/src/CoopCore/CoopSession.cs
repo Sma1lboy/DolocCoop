@@ -73,6 +73,8 @@ namespace CoopCore
         /// <summary>某个客机报告它捡走了这些掉落物(主机侧处理)。</summary>
         public event Action<ulong, List<DropEntry>> DropPickupReceived;
         public event Action<string> Log;
+        /// <summary>握手被拒(自己拒别人,或被别人拒):(对方id, 原因)。</summary>
+        public event Action<ulong, string> Rejected;
 
         public CoopSession(ITransport transport, string modVersion)
         {
@@ -233,10 +235,20 @@ namespace CoopCore
         {
             var data = MsgWriter.Frame(MsgType.Hello, bw =>
             {
-                bw.Write(Protocol.Version); bw.Write(_modVersion);
+                bw.Write(Protocol.Version);
+                bw.Write(_modVersion);
+                bw.Write(GameVersion ?? "");
             });
             _transport.Send(id, data, data.Length, SendMode.Reliable);
         }
+
+        /// <summary>
+        /// 本机的游戏版本,进房时双方比对。
+        /// 游戏版本不同会让存档结构、物品表、任务链都对不上,
+        /// 与其让两人连上后世界状态互相打架,不如在握手阶段就明确拒绝。
+        /// 由游戏侧在建立会话前赋值。
+        /// </summary>
+        public static string GameVersion { get; set; } = "";
 
         private void OnPeerDisconnected(ulong id)
         {
@@ -257,15 +269,26 @@ namespace CoopCore
                     {
                         ushort ver = br.ReadUInt16();
                         string modVer = br.ReadString();
-                        if (ver != Protocol.Version)
+                        string gameVer = SafeReadString(br);   // v8 新增,兼容旧端
+
+                        string reject = Validate(ver, modVer, gameVer);
+                        if (reject != null)
                         {
-                            Log?.Invoke($"peer {from} 协议版本不匹配 (本地 {Protocol.Version} vs {ver}/{modVer})");
-                            var nack = MsgWriter.Frame(MsgType.HelloAck, bw => { bw.Write(false); bw.Write(Protocol.Version); });
+                            Log?.Invoke($"拒绝 peer {from}: {reject}");
+                            var nack = MsgWriter.Frame(MsgType.HelloAck, bw =>
+                            {
+                                bw.Write(false); bw.Write(Protocol.Version); bw.Write(reject);
+                            });
                             _transport.Send(from, nack, nack.Length, SendMode.Reliable);
+                            Rejected?.Invoke(from, reject);
                             return;
                         }
+
                         var peer = GetOrAdd(from);
-                        var ack = MsgWriter.Frame(MsgType.HelloAck, bw => { bw.Write(true); bw.Write(Protocol.Version); });
+                        var ack = MsgWriter.Frame(MsgType.HelloAck, bw =>
+                        {
+                            bw.Write(true); bw.Write(Protocol.Version); bw.Write("");
+                        });
                         _transport.Send(from, ack, ack.Length, SendMode.Reliable);
                         RaiseJoinedOnce(peer);
                     }
@@ -275,8 +298,19 @@ namespace CoopCore
                     using (var br = MsgWriter.Payload(data, length))
                     {
                         bool ok = br.ReadBoolean();
-                        Log?.Invoke(ok ? $"peer {from} 握手成功" : $"peer {from} 拒绝: 版本不匹配");
-                        if (ok) RaiseJoinedOnce(GetOrAdd(from));
+                        br.ReadUInt16();                        // 对方协议版本,目前只用于日志
+                        string reason = SafeReadString(br);
+                        if (ok)
+                        {
+                            Log?.Invoke($"peer {from} 握手成功");
+                            RaiseJoinedOnce(GetOrAdd(from));
+                        }
+                        else
+                        {
+                            string why = string.IsNullOrEmpty(reason) ? "版本不匹配" : reason;
+                            Log?.Invoke($"被 peer {from} 拒绝: {why}");
+                            Rejected?.Invoke(from, why);
+                        }
                     }
                     break;
 
@@ -380,6 +414,36 @@ namespace CoopCore
                         ChatReceived?.Invoke(from, br.ReadString());
                     break;
             }
+        }
+
+        /// <summary>
+        /// 握手校验。返回 null 表示放行,否则返回**给玩家看的**拒绝原因。
+        ///
+        /// 三项都查:协议版本决定消息能不能解开;mod 版本决定同步行为是否一致;
+        /// 游戏版本决定物品表/任务链/存档结构是否对得上。
+        /// 任何一项不同都会让两人连上后世界状态互相打架,不如在门口就说清楚。
+        /// </summary>
+        private string Validate(ushort protocolVersion, string modVersion, string gameVersion)
+        {
+            if (protocolVersion != Protocol.Version)
+                return $"联机协议版本不同(对方 {protocolVersion},本机 {Protocol.Version}),请双方更新到同一版本的联机 Mod";
+
+            if (!string.IsNullOrEmpty(modVersion) && !string.IsNullOrEmpty(_modVersion)
+                && modVersion != _modVersion)
+                return $"联机 Mod 版本不同(对方 {modVersion},本机 {_modVersion})";
+
+            if (!string.IsNullOrEmpty(gameVersion) && !string.IsNullOrEmpty(GameVersion)
+                && gameVersion != GameVersion)
+                return $"游戏版本不同(对方 {gameVersion},本机 {GameVersion}),物品与任务数据可能对不上";
+
+            return null;
+        }
+
+        /// <summary>读一个可能不存在的字符串 —— 老版本发来的包没有后加的字段。</summary>
+        private static string SafeReadString(BinaryReader br)
+        {
+            try { return br.BaseStream.Position < br.BaseStream.Length ? br.ReadString() : ""; }
+            catch { return ""; }
         }
 
         private RemotePeer GetOrAdd(ulong id)

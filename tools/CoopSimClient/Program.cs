@@ -38,7 +38,9 @@ namespace CoopSimClient
             int fakeTime = int.Parse(Arg(args, "--time", "0"));
 
             var transport = new LoopbackTransport(s => Console.WriteLine("[Net] " + s));
-            var session = new CoopSession(transport, "sim-0.1");
+            // 与插件同版本,否则会被握手的版本校验挡在门外(实测撞过)
+            var session = new CoopSession(transport, BuildInfo.ModVersion);
+            CoopSession.GameVersion = Arg(args, "--game-version", "");   // 空串 = 不参与游戏版本比对
 
             session.ContainersReceived += list =>
             {
@@ -152,6 +154,7 @@ namespace CoopSimClient
         }
     }
 }
+
 
 
 

@@ -23,7 +23,7 @@ namespace DolocCoop
     {
         public const string PluginGuid = "sma1lboy.doloctown.coop";
         public const string PluginName = "DolocCoop";
-        public const string PluginVersion = "0.2.0";
+        public const string PluginVersion = BuildInfo.ModVersion;   // 版本号唯一出处在 CoopCore,测试工具共用同一个值
 
         internal static ManualLogSource Log;
 
@@ -43,6 +43,7 @@ namespace DolocCoop
             CoopPanel.OnInviteFriend = CoopRuntime.InviteFriend;
             CoopPanel.OnOpenSteamOverlay = CoopRuntime.OpenInvite;
 
+            CoopSession.GameVersion = Application.version;   // 握手时比对,版本不同直接说清楚
             SaveGuard.Install();   // 客机存档保护:必须在建立任何会话之前挂好
 
 
@@ -311,6 +312,12 @@ namespace DolocCoop
             _session = new CoopSession(transport, Plugin.PluginVersion);
             SaveGuard.SetClient(!transport.IsHost);   // 客机身份 → 本地存档转只读
             _session.Log += s => { Plugin.Log.LogInfo("[Session] " + s); NetLog.Log("SESSION " + s); };
+            _session.Rejected += (id, why) =>
+            {
+                Plugin.Log.LogWarning($"[Session] 握手被拒 {id}: {why}");
+                NetLog.Log($"HANDSHAKE_REJECT id={id} why={why}");
+                CoopPanel.Toast("无法联机:" + why);
+            };
             _session.PeerJoined += p =>
             {
                 Plugin.Log.LogInfo($"[Session] 玩家加入: {p.Id}");
@@ -395,6 +402,8 @@ namespace DolocCoop
         }
     }
 }
+
+
 
 
 

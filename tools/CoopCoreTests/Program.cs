@@ -41,6 +41,12 @@ namespace CoopCoreTests
             PeerLeftClearsState();
             LoopbackDeliversMessages();
 
+            Console.WriteLine("\n-- 握手校验 --");
+            RejectsModVersionMismatch();
+            RejectsGameVersionMismatch();
+            AcceptsWhenVersionsMatch();
+            ToleratesMissingGameVersion();
+
             Console.WriteLine("\n-- 同步计算(SyncMath)--");
             DropKeyQuantizesCoordinates();
             DropSignatureIsOrderIndependent();
@@ -280,6 +286,72 @@ namespace CoopCoreTests
             {
                 host.Dispose(); client.Dispose();
             }
+        }
+
+        // ---------------- 握手校验 ----------------
+
+        /// <summary>构造一个 Hello 包投给 session,返回拒绝原因(null 表示放行)。</summary>
+        private static string TryHandshake(string localMod, string localGame,
+                                           string remoteMod, string remoteGame,
+                                           ushort remoteProtocol)
+        {
+            CoopSession.GameVersion = localGame;
+            var transport = new FakeTransport();
+            var session = new CoopSession(transport, localMod);
+            string reason = null;
+            session.Rejected += (_, why) => reason = why;
+
+            var hello = MsgWriter.Frame(MsgType.Hello, bw =>
+            {
+                bw.Write(remoteProtocol);
+                bw.Write(remoteMod);
+                bw.Write(remoteGame);
+            });
+            transport.Inject(5, hello);
+            return reason;
+        }
+
+        private static void RejectsModVersionMismatch()
+        {
+            string why = TryHandshake("0.3.0", "1.00.03", "0.2.0", "1.00.03", Protocol.Version);
+            Check("拒绝 Mod 版本不同", why != null && why.Contains("Mod 版本"), $"原因: {why ?? "(放行了)"}");
+        }
+
+        private static void RejectsGameVersionMismatch()
+        {
+            string why = TryHandshake("0.3.0", "1.00.03", "0.3.0", "1.01.00", Protocol.Version);
+            Check("拒绝游戏版本不同", why != null && why.Contains("游戏版本"), $"原因: {why ?? "(放行了)"}");
+        }
+
+        private static void AcceptsWhenVersionsMatch()
+        {
+            string why = TryHandshake("0.3.0", "1.00.03", "0.3.0", "1.00.03", Protocol.Version);
+            Check("版本一致时放行", why == null, $"却被拒: {why}");
+        }
+
+        /// <summary>
+        /// 老版本客户端发来的包没有"游戏版本"这个字段,不能因此崩溃或误拒 ——
+        /// 协议字段是逐版本追加的,读取必须容忍缺失。
+        /// </summary>
+        private static void ToleratesMissingGameVersion()
+        {
+            CoopSession.GameVersion = "1.00.03";
+            var transport = new FakeTransport();
+            var session = new CoopSession(transport, "0.3.0");
+            string reason = null;
+            bool joined = false;
+            session.Rejected += (_, why) => reason = why;
+            session.PeerJoined += _ => joined = true;
+
+            // 只写协议版本和 mod 版本,不写游戏版本(模拟旧端)
+            var oldHello = MsgWriter.Frame(MsgType.Hello, bw =>
+            {
+                bw.Write(Protocol.Version);
+                bw.Write("0.3.0");
+            });
+            transport.Inject(6, oldHello);
+
+            Check("容忍缺失的新增字段", reason == null && joined, $"reason={reason} joined={joined}");
         }
 
         // ---------------- SyncMath ----------------
