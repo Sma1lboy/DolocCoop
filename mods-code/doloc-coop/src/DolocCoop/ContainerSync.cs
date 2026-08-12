@@ -88,6 +88,9 @@ namespace DolocCoop
             if (states == null || states.Count == 0) return;
             try
             {
+                // 收到多少、匹配上多少要分开记:场景里没有对应容器时会静默跳过,
+                // 没有这条日志就分不清"没收到"和"收到了但对不上"
+                int matched = 0, skipped = 0;
                 var byId = new Dictionary<string, IContainer>();
                 foreach (var c in FindContainers())
                 {
@@ -98,7 +101,8 @@ namespace DolocCoop
                 foreach (var st in states)
                 {
                     if (st == null || string.IsNullOrEmpty(st.Id)) continue;
-                    if (!byId.TryGetValue(st.Id, out var target)) continue;   // 不在当前场景,忽略
+                    if (!byId.TryGetValue(st.Id, out var target)) { skipped++; continue; }   // 不在当前场景
+                    matched++;
 
                     // 本地已经一致就别覆盖 —— OverwriteInventory 会触发 UI 重绘
                     string localSig = Signature(Read(target, st.Id));
@@ -115,6 +119,8 @@ namespace DolocCoop
                     _applied++;
                     NetLog.Log($"CONTAINER_APPLY id={st.Id} slots={items.Count} total={_applied}");
                 }
+
+                NetLog.Log($"CONTAINER_RECV got={states.Count} matched={matched} skipped={skipped} 场景容器={byId.Count}");
             }
             catch (Exception e)
             {

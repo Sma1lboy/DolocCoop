@@ -106,6 +106,20 @@ namespace CoopSimClient
                 if (asHost && tick % 30 == 0 && session.Peers.Count > 0)
                 {
                     session.SendWorldSync(fakeTime, new System.Collections.Generic.List<CoopCore.WeatherEntry>());
+                    // 发一个假箱子,验证消息编解码与客机侧接收路径(场景里没有对应容器时应优雅跳过)
+                    session.SendContainers(new System.Collections.Generic.List<ContainerState>
+                    {
+                        new ContainerState
+                        {
+                            Id = "SIM_FAKE_BOX",
+                            Slots = new System.Collections.Generic.List<SlotItem>
+                            {
+                                new SlotItem { ItemName = "wood", Count = 7 },
+                                new SlotItem { ItemName = "", Count = 0 },
+                                new SlotItem { ItemName = "stone", Count = 3 },
+                            }
+                        }
+                    });
                     if (tick % 150 == 0) Console.WriteLine($"    广播时间 {fakeTime} 秒");
                 }
 
@@ -124,5 +138,6 @@ namespace CoopSimClient
         }
     }
 }
+
 
 

@@ -166,7 +166,9 @@ namespace DolocCoop
                 ? (_transport.IsHost ? "  <size=13>(本机为时间权威)</size>" : "  <size=13>(跟随房主)</size>")
                 : ""));
             sb.AppendLine();
+            sb.AppendLine("天气: " + TimeSync.DescribeWeather());
             sb.AppendLine("任务: " + MissionSync.Describe());
+            sb.AppendLine("箱子: 场景内 " + ContainerSync.TrackedCount + " 个在同步");
             sb.AppendLine("我的动作: " + ActionSync.Friendly(ActionSync.ReadLocalActionState()));
             sb.AppendLine();
             sb.AppendLine("<b>成员 (" + _session.Peers.Count + ")</b>");
@@ -364,6 +366,7 @@ namespace DolocCoop
         }
     }
 }
+
 
 
 
