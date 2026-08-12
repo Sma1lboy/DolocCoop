@@ -85,7 +85,6 @@ namespace CoopSimClient
                 transport.Connect(host, port);
                 Console.WriteLine("[模式] 客机 —— 游戏应已按 F6 开主机。");
             }
-            session.SendProfile(name, "");
 
             float angle = 0f;
             var last = DateTime.UtcNow;
@@ -111,6 +110,8 @@ namespace CoopSimClient
                 // (地上没有对应物品时应记 DROP_PICKUP_MISS 并优雅忽略)
                 if (!asHost && tick % 75 == 0 && session.Peers.Count > 0)
                 {
+                    // 外观要反复发:第一次发的时候可能还没有 peer,等于发给空气
+                    session.SendProfile(name, Arg(args, "--hat", ""));
                     session.SendChat("你好,我是模拟客机 —— 这条是聊天测试");
                     session.SendDropPickup(new System.Collections.Generic.List<DropEntry>
                     {
@@ -155,6 +156,8 @@ namespace CoopSimClient
         }
     }
 }
+
+
 
 
 

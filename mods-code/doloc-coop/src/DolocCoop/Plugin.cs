@@ -123,6 +123,12 @@ namespace DolocCoop
                     _session.SendLocalState(x, y, faceLeft, animHash, animTime);
             }
 
+            ProfileSync.Tick(_session);   // 昵称/帽子变了才发,低频
+
+
+            
+
+
             // 主机权威:只有房主广播世界状态与箱子内容,客机被动跟随
             if (_transport != null && _transport.IsHost)
             {
@@ -342,6 +348,7 @@ namespace DolocCoop
                 if (_transport != null && _transport.IsHost) ContainerSync.ResendAll();
                 if (_transport != null && _transport.IsHost) MissionSync.ResendAll();
                 if (_transport != null && _transport.IsHost) DropItemSync.ResendAll();
+                ProfileSync.Resend();   // 新人进房:把自己的昵称与帽子再报一次
             };
             _session.PeerLeft += p =>
             {
@@ -424,6 +431,8 @@ namespace DolocCoop
         }
     }
 }
+
+
 
 
 
