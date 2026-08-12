@@ -76,24 +76,57 @@ namespace DolocCoop
         /// 启动时就建好 SteamTransport —— 好友邀请是 Steam 回调推过来的,
         /// 必须在收到邀请之前就注册好回调,否则玩家点了邀请没人接。
         /// </summary>
+        private static bool _steamReady;
+        private static float _steamRetryTimer;
+        private static int _steamAttempts;
+
         public static void Init()
         {
+            TrySetupSteam();   // 大概率会失败,见下
+        }
+
+        /// <summary>
+        /// 建立 Steam 传输并注册邀请回调。
+        ///
+        /// **必须重试**:插件 Awake 跑在游戏初始化 Steamworks 之前,
+        /// 这时 `SteamAPI.IsSteamRunning()` 返回 true 但 API 还没 Init,
+        /// 构造回调会抛 "Steamworks is not initialized"。
+        /// 一次失败就放弃的话,邀请回调永远注册不上 —— 别人邀请你,你这边毫无反应。
+        /// (这个问题是在多人压力测试的日志里发现的,单人测试完全看不出来。)
+        /// </summary>
+        private static bool TrySetupSteam()
+        {
+            if (_steamReady) return true;
             try
             {
-                if (!SteamAPI.IsSteamRunning())
-                {
-                    Plugin.Log.LogWarning("Steam 未运行,联机功能不可用(回环测试仍可用)");
-                    return;
-                }
+                if (!SteamAPI.IsSteamRunning()) return false;
                 EnsureSteam();
                 _steam.LobbyEntered += OnLobbyEntered;
-                Plugin.Log.LogInfo("Steam 传输已就绪,可接收好友邀请");
+                _steamReady = true;
+                Plugin.Log.LogInfo($"Steam 传输已就绪,可接收好友邀请(第 {_steamAttempts + 1} 次尝试)");
                 NetLog.Log("STEAM_READY 已注册邀请回调");
+                return true;
             }
             catch (Exception e)
             {
-                Plugin.Log.LogError("初始化 Steam 传输失败: " + e);
+                _steamAttempts++;
+                _steam = null;   // 半成品对象要丢掉,否则下次 EnsureSteam 会以为已经建好
+                if (_steamAttempts == 1)
+                    Plugin.Log.LogInfo("Steamworks 尚未初始化,稍后重试: " + e.Message);
+                else if (_steamAttempts % 60 == 0)
+                    Plugin.Log.LogWarning($"Steam 传输仍未就绪(已试 {_steamAttempts} 次): {e.Message}");
+                return false;
             }
+        }
+
+        /// <summary>每帧调用:Steam 没就绪就每秒重试一次。</summary>
+        private static void PumpSteamSetup()
+        {
+            if (_steamReady) return;
+            _steamRetryTimer += Time.unscaledDeltaTime;
+            if (_steamRetryTimer < 1f) return;
+            _steamRetryTimer = 0f;
+            TrySetupSteam();
         }
 
         /// <summary>进入大厅(自建或接受邀请):建立会话并把管理页面弹出来。</summary>
@@ -111,6 +144,7 @@ namespace DolocCoop
         public static void Tick()
         {
             PollInput();
+            PumpSteamSetup();   // Steamworks 比插件晚就绪,要一直重试到成功
 
             if (_session == null) return;
             _session.Pump();
@@ -431,6 +465,7 @@ namespace DolocCoop
         }
     }
 }
+
 
 
 
