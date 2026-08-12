@@ -20,13 +20,16 @@ namespace DolocCoop
     /// </summary>
     internal static class AutoTest
     {
-        private enum Phase { Idle, WaitInit, Loading, WaitAgent, PlaceBox, StartHost, ProbeSave, Done }
+        private enum Phase { Idle, WaitInit, Loading, WaitAgent, PlaceBox, StartHost, SpawnDrop, ProbeSave, Done }
 
         private static Phase _phase = Phase.Idle;
         private static bool _checked;
         private static int _slot;
         private static bool _asClient;
         private static bool _placeBox;
+        private static bool _spawnDrop;
+        private static bool _dropSpawned;
+        private static Vector2 _dropPos;
         private static float _phaseStart;
         private static float _deadline;
 
@@ -108,7 +111,7 @@ namespace DolocCoop
                         {
                             Log("以客机身份接入本机回环主机(模拟客机需先用 --host-mode 启动)");
                             CoopRuntime.StartLoopbackClientForTest();
-                            Goto(Phase.ProbeSave, 15f);
+                            Goto(_spawnDrop ? Phase.SpawnDrop : Phase.ProbeSave, 20f);
                             return;
                         }
                         else
@@ -117,6 +120,23 @@ namespace DolocCoop
                             CoopRuntime.StartLoopbackHostForTest();
                         }
                         _phase = Phase.Done;
+                    }
+                    break;
+
+                case Phase.SpawnDrop:
+                    // 在地上造一个掉落物,等客机把它记进"已知地面",再悄悄拿掉 ——
+                    // 模拟"本地玩家捡走了",验证客机的差分检测会不会上报主机。
+                    // 这是最后一条没验证过的路径:开局存档地上什么都没有。
+                    if (Elapsed > 3f && !_dropSpawned)
+                    {
+                        _dropSpawned = true;
+                        SpawnTestDrop();
+                        _deadline = 30f;   // 后面还要等记账 + 移除
+                    }
+                    else if (_dropSpawned && Elapsed > 12f)
+                    {
+                        RemoveTestDrop();
+                        Goto(Phase.ProbeSave, 15f);
                     }
                     break;
 
@@ -161,11 +181,12 @@ namespace DolocCoop
                 string body = File.ReadAllText(path).Trim();
                 var parts = body.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
                 if (parts.Length == 0 || !int.TryParse(parts[0], out _slot)) _slot = 0;
-                _asClient = false; _placeBox = false;
+                _asClient = false; _placeBox = false; _spawnDrop = false;
                 for (int i = 1; i < parts.Length; i++)
                 {
                     if (parts[i].Equals("client", StringComparison.OrdinalIgnoreCase)) _asClient = true;
                     if (parts[i].Equals("box", StringComparison.OrdinalIgnoreCase)) _placeBox = true;
+                    if (parts[i].Equals("drop", StringComparison.OrdinalIgnoreCase)) _spawnDrop = true;
                 }
                 File.Delete(path);   // 一次性,避免下次启动又自动进游戏
 
@@ -208,6 +229,47 @@ namespace DolocCoop
             }
         }
 
+        /// <summary>在玩家脚边造一个掉落物,用来验证客机的捡拾差分检测。</summary>
+        private static void SpawnTestDrop()
+        {
+            try
+            {
+                var agent = DolocAPI.agent;
+                var room = DolocAPI.archiveHandle?.currentRoom;
+                if (agent == null || room?.DM_dropitem == null) { Log("造掉落物失败:房间或玩家为空"); return; }
+
+                var p = agent.transform.position;
+                _dropPos = new Vector2(p.x - 2f, p.y);
+                var d = room.DM_dropitem.CreateDropItem(room, "wood", _dropPos, false);
+                Log(d != null
+                    ? $"已在 ({_dropPos.x:F1},{_dropPos.y:F1}) 造一个测试掉落物,等客机记账"
+                    : "造掉落物失败:CreateDropItem 返回 null");
+            }
+            catch (Exception e) { Log("造掉落物异常: " + e.Message); }
+        }
+
+        /// <summary>悄悄拿掉它 —— 模拟"本地玩家捡走了",客机应当上报主机。</summary>
+        private static void RemoveTestDrop()
+        {
+            try
+            {
+                var room = DolocAPI.archiveHandle?.currentRoom;
+                if (room?.DM_dropitem == null) return;
+
+                foreach (var d in room.DM_dropitem.AllDatas)
+                {
+                    if (d == null || d.IsRemoved) continue;
+                    var p = d.PositionWS;
+                    if ((p - _dropPos).sqrMagnitude > 0.25f) continue;
+                    room.DM_dropitem.RemoveDropItem(d);
+                    Log("已移除测试掉落物(模拟被捡走),等客机上报");
+                    return;
+                }
+                Log("没找到测试掉落物,可能已被别的逻辑清掉");
+            }
+            catch (Exception e) { Log("移除掉落物异常: " + e.Message); }
+        }
+
         private static bool GameInitialized()
         {
             try { return DolocAPI.IsGameInitialized; } catch { return false; }
@@ -230,5 +292,7 @@ namespace DolocCoop
         }
     }
 }
+
+
 
 

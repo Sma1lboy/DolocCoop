@@ -129,3 +129,38 @@ foreach ($n in @("玩家A","玩家B","玩家C")) {
 **邀请回调永远注册不上,别人邀请你这边毫无反应**。
 单人测试完全看不出来,因为自己按 F9 建房时 Steam 早就好了。
 已改成每秒重试直到成功(实测第 2 次成功)。
+
+## 自测标记的完整用法(2026-08-12)
+
+`autotest.flag` 内容格式:`<存档位> [client] [box] [drop]`
+
+| 关键字 | 作用 |
+|--------|------|
+| (无) | 加载存档 → 开回环主机,等模拟客机接入 |
+| `client` | 改为以客机身份接入(模拟客机需先 `--host-mode` 启动) |
+| `box` | 临时放一个木箱,用于验证箱子同步 |
+| `drop` | 造一个掉落物再移除,模拟"被本地玩家捡走",验证捡拾上报 |
+
+**安全前提**:`box`/`drop` 会先强制开启存档保护,所有写盘被拦,
+造出来的东西只在内存里,退出即消失。每次测试都会比对存档文件哈希确认未被修改。
+
+例:`1 box client drop` = 用存档 1、放箱子、以客机身份接入、跑捡拾检测。
+
+### 全部同步项的实测记录
+
+| 同步项 | 关键日志 |
+|--------|----------|
+| 时间 | `TIME_CORRECT diff=7018` 后转稳定,极端值 `TIME_REJECT` |
+| 天气 | `天气区域 3 个: default=1, wetland=3, ruined_city=2` |
+| 行为 | `ACTION_SEND state=AgentStateIdle` |
+| 任务 | `MISSION_SEND count=13` |
+| 掉落物广播 | `DROP_SEND count=0`(空地面也广播,不再静默) |
+| 掉落物捡拾 | `DROP_PICKUP_SEND count=1 first=wood` → 主机 `[捡拾] 报告捡走 1 个` |
+| 箱子读 | `CONTAINER_SEND count=1 first=Case#2` → 客机 `[箱子] 收到 1 个` |
+| 箱子写 | `CONTAINER_APPLY id=Case#2 slots=20 total=1`(**只应用一次**) |
+| 外观 | `AVATAR_HAT id=65418 hat=welder_helmet` |
+| 聊天 | `[Chat] 53974: 你好…` |
+| 存档保护 | `SAVEGUARD_BLOCK count=1` + 文件哈希未变 |
+| 断线 | `超过 10 秒无消息,判定掉线` + `PEER_LEFT` |
+| 版本校验 | `HANDSHAKE_REJECT why=联机 Mod 版本不同` |
+| 多人 | 3 个 peer / 3 个化身 / 3 路聊天各自独立 |
