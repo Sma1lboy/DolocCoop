@@ -10,6 +10,12 @@
 param(
     [string]$Ref = "",
     [string]$HairHex = "",
+    # 反光档单独指定 —— 它占头发的 21.5%,是整个精灵上第二大的色块。
+    # 挑染发色靠它才看得出来;不给就按主色提亮 1.28 倍(原来的行为)。
+    [string]$HighlightHex = "",
+    # 暗部系数。近黑发要压得更狠,不然三档挤在一起,像素画会糊成一坨
+    [double]$DarkFactor = 0.62,
+    [string]$OutDir = "",
     [switch]$SkipFrames
 )
 
@@ -17,7 +23,7 @@ Add-Type -AssemblyName System.Drawing
 $ErrorActionPreference = "Stop"
 
 $modRoot = Split-Path $PSScriptRoot -Parent
-$texOut  = Join-Path $modRoot "Content\Texture"
+$texOut  = if ($OutDir) { $OutDir } else { Join-Path $modRoot "Content\Texture" }
 $srcRoot = "C:\Program Files (x86)\Steam\steamapps\workshop\content\2285550\3705665433\Content\04 其他内容示例 Miscellaneous\03 备用贴图 Image Assets\02 主角动画 Character Animations\_IGNORE\01 头发动画 Hair Animations"
 
 if (-not (Test-Path $srcRoot)) {
@@ -90,8 +96,16 @@ if (-not $target) {
 }
 
 $dstMid  = $target
-$dstDark = Shift $target 0.62     # 暗部
-$dstHigh = Shift $target 1.28     # 反光
+$dstDark = Shift $target $DarkFactor
+$dstHigh = if ($HighlightHex) {
+    $hh = $HighlightHex.TrimStart('#')
+    [System.Drawing.Color]::FromArgb(255,
+        [Convert]::ToInt32($hh.Substring(0,2),16),
+        [Convert]::ToInt32($hh.Substring(2,2),16),
+        [Convert]::ToInt32($hh.Substring(4,2),16))
+} else { Shift $target 1.28 }
+Write-Host ("三档: 暗 #{0:X2}{1:X2}{2:X2} / 主 #{3:X2}{4:X2}{5:X2} / 反光 #{6:X2}{7:X2}{8:X2}" -f `
+    $dstDark.R,$dstDark.G,$dstDark.B, $dstMid.R,$dstMid.G,$dstMid.B, $dstHigh.R,$dstHigh.G,$dstHigh.B) -ForegroundColor Cyan
 
 # ---------- 批量换色 ----------
 if (-not $SkipFrames) {
