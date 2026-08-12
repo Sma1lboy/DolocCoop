@@ -20,7 +20,7 @@ namespace DolocCoop
     /// </summary>
     internal static class AutoTest
     {
-        private enum Phase { Idle, WaitInit, Loading, WaitAgent, StartHost, Done }
+        private enum Phase { Idle, WaitInit, Loading, WaitAgent, StartHost, ProbeSave, Done }
 
         private static Phase _phase = Phase.Idle;
         private static bool _checked;
@@ -88,12 +88,34 @@ namespace DolocCoop
                         {
                             Log("以客机身份接入本机回环主机(模拟客机需先用 --host-mode 启动)");
                             CoopRuntime.StartLoopbackClientForTest();
+                            Goto(Phase.ProbeSave, 15f);
+                            return;
                         }
                         else
                         {
                             Log("开启回环主机,等待模拟客机接入");
                             CoopRuntime.StartLoopbackHostForTest();
                         }
+                        _phase = Phase.Done;
+                    }
+                    break;
+
+                case Phase.ProbeSave:
+                    // 客机身份下主动尝试一次存盘,验证 SaveGuard 真的拦得住。
+                    // 这是有意为之的破坏性动作 —— 如果保护失效,存档就会被写。
+                    // 所以只在自测流程里做,并且写在日志里方便事后核对。
+                    if (Elapsed > 4f)
+                    {
+                        int before = SaveGuard.BlockedCount;
+                        try
+                        {
+                            DolocAPI.SaveGame(_slot);
+                            int blocked = SaveGuard.BlockedCount - before;
+                            Log(blocked > 0
+                                ? $"存档保护验证通过:尝试存盘被拦截({blocked} 次)"
+                                : "⚠ 存档保护失效:尝试存盘没有被拦截!");
+                        }
+                        catch (Exception e) { Log("存档保护验证时异常: " + e.Message); }
                         _phase = Phase.Done;
                     }
                     break;

@@ -43,6 +43,9 @@ namespace DolocCoop
             CoopPanel.OnInviteFriend = CoopRuntime.InviteFriend;
             CoopPanel.OnOpenSteamOverlay = CoopRuntime.OpenInvite;
 
+            SaveGuard.Install();   // 客机存档保护:必须在建立任何会话之前挂好
+
+
             CoopRuntime.Init();
 
             UnityLoopDriver.Add(CoopRuntime.Tick);
@@ -184,6 +187,8 @@ namespace DolocCoop
             sb.AppendLine("任务: " + MissionSync.Describe());
             sb.AppendLine("箱子: 场景内 " + ContainerSync.TrackedCount + " 个在同步   地上掉落物: " + DropItemSync.LocalCount);
             sb.AppendLine("我的动作: " + ActionSync.Friendly(ActionSync.ReadLocalActionState()));
+            if (SaveGuard.IsClient)
+                sb.AppendLine("<color=#ffd479>存档保护: 本地只读,已拦截 " + SaveGuard.BlockedCount + " 次存盘</color>");
             sb.AppendLine();
             sb.AppendLine("<b>成员 (" + _session.Peers.Count + ")</b>");
             if (_session.Peers.Count == 0) sb.AppendLine("  (还没有其他玩家加入)");
@@ -304,6 +309,7 @@ namespace DolocCoop
             _session?.Dispose();
             _transport = transport;
             _session = new CoopSession(transport, Plugin.PluginVersion);
+            SaveGuard.SetClient(!transport.IsHost);   // 客机身份 → 本地存档转只读
             _session.Log += s => { Plugin.Log.LogInfo("[Session] " + s); NetLog.Log("SESSION " + s); };
             _session.PeerJoined += p =>
             {
@@ -389,6 +395,7 @@ namespace DolocCoop
         }
     }
 }
+
 
 
 
