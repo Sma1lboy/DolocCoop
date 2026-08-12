@@ -11,7 +11,8 @@ namespace CoopCore
     {
         // v2: TimeSync(主机权威时间)
         // v3: 扩展为 WorldSync,时间 + 各区域天气一起下发
-        public const ushort Version = 3;
+        // v4: 新增 ContainerSync(箱子内容)
+        public const ushort Version = 4;
     }
 
     public enum MsgType : byte
@@ -27,6 +28,7 @@ namespace CoopCore
         Chat = 12,
 
         WorldSync = 20,      // 主机→客机: 游戏内绝对时间 + 各区域天气
+        ContainerSync = 21,  // 主机→客机: 若干箱子的整箱内容
         // 预留
         SceneChange = 21,
         SleepVote = 22,

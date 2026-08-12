@@ -4,6 +4,20 @@ using System.IO;
 
 namespace CoopCore
 {
+    /// <summary>箱子里的一格(空格用 ItemName="" 表示)。</summary>
+    public struct SlotItem
+    {
+        public string ItemName;
+        public int Count;
+    }
+
+    /// <summary>一个箱子的完整内容。Id 需要跨端稳定(游戏侧用物体 guid)。</summary>
+    public sealed class ContainerState
+    {
+        public string Id;
+        public List<SlotItem> Slots;
+    }
+
     /// <summary>一个天气区域的当前状态。</summary>
     public struct WeatherEntry
     {
@@ -40,6 +54,8 @@ namespace CoopCore
         public event Action<ulong, string> ChatReceived;
         /// <summary>收到主机的世界状态:(游戏内累计秒数, 各区域天气)。</summary>
         public event Action<int, List<WeatherEntry>> WorldSyncReceived;
+        /// <summary>收到主机的箱子内容(整箱覆盖)。</summary>
+        public event Action<List<ContainerState>> ContainersReceived;
         public event Action<string> Log;
 
         public CoopSession(ITransport transport, string modVersion)
@@ -88,6 +104,33 @@ namespace CoopCore
                 {
                     bw.Write(weather[i].RegionId ?? "");
                     bw.Write(weather[i].WeatherType);
+                }
+            });
+            _transport.Broadcast(data, data.Length, SendMode.Reliable);
+        }
+
+        /// <summary>
+        /// 主机广播若干箱子的**整箱**内容。
+        /// 整箱覆盖而不是做增量:箱子格数有限(几十格),带宽完全够用,
+        /// 而增量同步要处理"拿走/放入/交换/堆叠"一堆边界,极易出现两端货不对板。
+        /// </summary>
+        public void SendContainers(IList<ContainerState> containers)
+        {
+            if (containers == null || containers.Count == 0) return;
+            var data = MsgWriter.Frame(MsgType.ContainerSync, bw =>
+            {
+                bw.Write((byte)Math.Min(containers.Count, 255));
+                for (int i = 0; i < containers.Count && i < 255; i++)
+                {
+                    var c = containers[i];
+                    bw.Write(c.Id ?? "");
+                    var slots = c.Slots ?? new List<SlotItem>();
+                    bw.Write((ushort)slots.Count);
+                    foreach (var s in slots)
+                    {
+                        bw.Write(s.ItemName ?? "");
+                        bw.Write(s.Count);
+                    }
                 }
             });
             _transport.Broadcast(data, data.Length, SendMode.Reliable);
@@ -185,6 +228,23 @@ namespace CoopCore
                         for (int i = 0; i < n; i++)
                             weather.Add(new WeatherEntry { RegionId = br.ReadString(), WeatherType = br.ReadInt32() });
                         WorldSyncReceived?.Invoke(seconds, weather);
+                    }
+                    break;
+
+                case MsgType.ContainerSync:
+                    using (var br = MsgWriter.Payload(data, length))
+                    {
+                        int n = br.ReadByte();
+                        var list = new List<ContainerState>(n);
+                        for (int i = 0; i < n; i++)
+                        {
+                            var c = new ContainerState { Id = br.ReadString(), Slots = new List<SlotItem>() };
+                            int slotCount = br.ReadUInt16();
+                            for (int s = 0; s < slotCount; s++)
+                                c.Slots.Add(new SlotItem { ItemName = br.ReadString(), Count = br.ReadInt32() });
+                            list.Add(c);
+                        }
+                        ContainersReceived?.Invoke(list);
                     }
                     break;
 

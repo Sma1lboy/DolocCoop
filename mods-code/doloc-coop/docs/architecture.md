@@ -70,7 +70,7 @@
 |--------|-----|-----|------|
 | 时间 | `archiveHandle.timeData.totalSeconds` | `PassTimeNoControl` / `TrackBackTime` | ✅ 已实现并实测 |
 | 天气 | `timeData.climateManager.GetCurrentWeather(区域id)`,区域从 `weatherSystems` 枚举 | `archiveHandle.SetWeather(区域id, WeatherType, shouldRender)` | ✅ 已实现并实测(default/wetland/ruined_city 三区) |
-| 箱子 | `IContainer.inventory` (LinearInventory) | `IContainer.OverwriteInventory(IEnumerable<CountItem>)` | ⬜ 接口已找到,待实现 |
+| 箱子 | `IContainer.inventory.ForEach` | `IContainer.OverwriteInventory(...)` | 🟡 已实现,**未端到端验证**(见下) |
 | 行为 | `BodyController.StateManager.current`(AgentState*) | `agent.EnterState<T>()` | ⬜ 待实现 |
 | 任务 | `MissionManager` / `BoardMissionManager` | 待摸底 | ⬜ 待实现 |
 
@@ -80,3 +80,20 @@
 - 主机权威:客机开箱只发意图,主机结算后广播整箱内容(`OverwriteInventory`)。
   整箱覆盖比做增量简单得多,而箱子容量有限,带宽可接受。
 - 冲突场景:两人同时拿同一格。主机串行处理请求即可自然解决。
+
+### 箱子同步的验证缺口(2026-08-12)
+
+代码已实现并部署,主机侧扫描确认在运行(`CONTAINER_SCAN found=0`),
+但**两个存档都是开局阶段,场景里一个容器都没有**,所以从未真正同步过一个箱子。
+
+扫描范围已经放宽到所有 `IContainer`(储物箱/祭坛/宝箱 + 鱼缸/孵化器/粉碎机等
+农场设备),仍然是 0 —— 是存档里确实没有,不是扫描坏了。
+
+**要完成验证,需要在游戏里放一个储物箱**(或任意带存储的设备),然后:
+```powershell
+.\dev.ps1 -NoLaunch
+Set-Content "...\DolocCoop-debug\autotest.flag" "<存档位>" -NoNewline
+Start-Process "steam://rungameid/2285550"
+.\sim.ps1     # 看模拟客机是否打印 [箱子] 收到 N 个箱子
+```
+预期日志:`CONTAINER_SCAN found>0` → `CONTAINER_SEND` → 客机 `[箱子]`。

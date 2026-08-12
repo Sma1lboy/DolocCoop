@@ -115,9 +115,12 @@ namespace DolocCoop
                     _session.SendLocalState(x, y, faceLeft, animHash, animTime);
             }
 
-            // 主机权威:只有房主广播时间,客机被动跟随
+            // 主机权威:只有房主广播世界状态与箱子内容,客机被动跟随
             if (_transport != null && _transport.IsHost)
+            {
                 TimeSync.TickHost(_session);
+                ContainerSync.TickHost(_session);
+            }
 
             RemotePlayerRenderer.Tick();
         }
@@ -285,6 +288,7 @@ namespace DolocCoop
                 NetLog.Log($"PEER_JOINED id={p.Id}");
                 // 新人进房立刻补发世界状态,不用等心跳
                 if (_transport != null && _transport.IsHost) TimeSync.ForceSendNext();
+                if (_transport != null && _transport.IsHost) ContainerSync.ResendAll();
             };
             _session.PeerLeft += p =>
             {
@@ -306,6 +310,10 @@ namespace DolocCoop
             {
                 NetLog.Sample(30, $"PEER_STATE id={p.Id} pos=({p.X:F2},{p.Y:F2}) faceLeft={p.FacingLeft} anim={p.AnimHash}");
                 RemotePlayerRenderer.Upsert(p);
+            };
+            _session.ContainersReceived += states =>
+            {
+                if (_transport != null && !_transport.IsHost) ContainerSync.ApplyRemote(states);
             };
             NetLog.Log($"会话已建立 transport={transport.GetType().Name} selfId={transport.SelfId}");
         }
@@ -343,6 +351,7 @@ namespace DolocCoop
         }
     }
 }
+
 
 
 

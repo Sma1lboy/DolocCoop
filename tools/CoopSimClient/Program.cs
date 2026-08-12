@@ -40,6 +40,16 @@ namespace CoopSimClient
             var transport = new LoopbackTransport(s => Console.WriteLine("[Net] " + s));
             var session = new CoopSession(transport, "sim-0.1");
 
+            session.ContainersReceived += list =>
+            {
+                Console.WriteLine($"[箱子] 收到 {list.Count} 个箱子");
+                foreach (var c in list)
+                {
+                    int nonEmpty = c.Slots.FindAll(s => !string.IsNullOrEmpty(s.ItemName)).Count;
+                    Console.WriteLine($"    {c.Id}  共 {c.Slots.Count} 格,有物品 {nonEmpty} 格");
+                }
+            };
+
             session.WorldSyncReceived += (t, weather) =>
                 Console.WriteLine($"[世界] 主机时间 {t} 秒 (第 {t / 86400 + 1} 天 {(t % 86400) / 3600:00}:{(t % 3600) / 60:00})，天气区域 {weather.Count} 个: {string.Join(", ", weather.ConvertAll(w => w.RegionId + "=" + w.WeatherType))}");
 
@@ -114,4 +124,5 @@ namespace CoopSimClient
         }
     }
 }
+
 
