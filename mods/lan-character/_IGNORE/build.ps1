@@ -19,14 +19,14 @@ $here = $PSScriptRoot
 $HAIR      = "#241F26"   # 主色。取自 lan-imag 仓库 approved-gamechar.jpg 的发色 #201E22,略提亮
 $HIGHLIGHT = "#A87B4E"   # 焦糖挑染,落在刘海与鬓边
 $DARKF     = 0.55
-$TAILLEN   = 9
+$TAILLEN   = 8
 
 Write-Host "[1/4] 从官方原始帧重新生成 144 帧并换色" -ForegroundColor Cyan
 & (Join-Path $here "gen-character.ps1") -HairHex $HAIR -HighlightHex $HIGHLIGHT -DarkFactor $DARKF | Out-Null
 
 if (-not $NoTail) {
-    Write-Host "[2/4] 接长侧发" -ForegroundColor Cyan
-    & (Join-Path $here "add-ponytail.ps1") -Length $TAILLEN
+    Write-Host "[2/4] 接长发" -ForegroundColor Cyan
+    & (Join-Path $here "extend-hair.ps1") -Length $TAILLEN
 } else {
     Write-Host "[2/4] 跳过接发(-NoTail)" -ForegroundColor DarkGray
 }
@@ -49,5 +49,6 @@ if ($Deploy) {
     $repo = Split-Path (Split-Path (Split-Path $here -Parent) -Parent) -Parent
     & (Join-Path $repo "deploy.ps1") "lan-character"
 }
+
 
 
