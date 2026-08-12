@@ -120,7 +120,11 @@ namespace DolocCoop
             {
                 TimeSync.TickHost(_session);
                 ContainerSync.TickHost(_session);
+                MissionSync.TickHost(_session);
             }
+
+            ActionSync.Tick(_session);   // 行为:只在动作切换时发
+
 
             RemotePlayerRenderer.Tick();
         }
@@ -162,10 +166,13 @@ namespace DolocCoop
                 ? (_transport.IsHost ? "  <size=13>(本机为时间权威)</size>" : "  <size=13>(跟随房主)</size>")
                 : ""));
             sb.AppendLine();
+            sb.AppendLine("任务: " + MissionSync.Describe());
+            sb.AppendLine("我的动作: " + ActionSync.Friendly(ActionSync.ReadLocalActionState()));
+            sb.AppendLine();
             sb.AppendLine("<b>成员 (" + _session.Peers.Count + ")</b>");
             if (_session.Peers.Count == 0) sb.AppendLine("  (还没有其他玩家加入)");
             foreach (var p in _session.Peers.Values)
-                sb.AppendLine($"  · {(string.IsNullOrEmpty(p.Name) ? p.Id.ToString() : p.Name)}   pos=({p.X:F1},{p.Y:F1})");
+                sb.AppendLine($"  · {(string.IsNullOrEmpty(p.Name) ? p.Id.ToString() : p.Name)}  {ActionSync.Friendly(p.ActionState)}  pos=({p.X:F1},{p.Y:F1})");
             return sb.ToString();
         }
 
@@ -289,6 +296,7 @@ namespace DolocCoop
                 // 新人进房立刻补发世界状态,不用等心跳
                 if (_transport != null && _transport.IsHost) TimeSync.ForceSendNext();
                 if (_transport != null && _transport.IsHost) ContainerSync.ResendAll();
+                if (_transport != null && _transport.IsHost) MissionSync.ResendAll();
             };
             _session.PeerLeft += p =>
             {
@@ -315,6 +323,11 @@ namespace DolocCoop
             {
                 if (_transport != null && !_transport.IsHost) ContainerSync.ApplyRemote(states);
             };
+            _session.MissionsReceived += ids =>
+            {
+                if (_transport != null && !_transport.IsHost) MissionSync.ApplyRemote(ids);
+            };
+            _session.PeerActionReceived += (peer, state, ax, ay) => ActionSync.OnRemoteAction(peer, state, ax, ay);
             NetLog.Log($"会话已建立 transport={transport.GetType().Name} selfId={transport.SelfId}");
         }
     }
@@ -351,6 +364,8 @@ namespace DolocCoop
         }
     }
 }
+
+
 
 
 

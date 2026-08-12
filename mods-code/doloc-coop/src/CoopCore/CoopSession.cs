@@ -35,6 +35,7 @@ namespace CoopCore
         public int AnimHash;        // Animator 状态 shortNameHash(同一 controller 跨端一致)
         public float AnimTime;      // normalizedTime,用于新状态起播对齐
         public string HatId = "";
+        public string ActionState = "";   // 当前动作(砍树/浇水/钓鱼…),仅在切换时更新
         public DateTime LastSeenUtc;
     }
 
@@ -56,6 +57,10 @@ namespace CoopCore
         public event Action<int, List<WeatherEntry>> WorldSyncReceived;
         /// <summary>收到主机的箱子内容(整箱覆盖)。</summary>
         public event Action<List<ContainerState>> ContainersReceived;
+        /// <summary>某个玩家的动作状态变了:(玩家, 状态名, x, y)。</summary>
+        public event Action<RemotePeer, string, float, float> PeerActionReceived;
+        /// <summary>收到主机的已完成任务列表。</summary>
+        public event Action<List<string>> MissionsReceived;
         public event Action<string> Log;
 
         public CoopSession(ITransport transport, string modVersion)
@@ -132,6 +137,32 @@ namespace CoopCore
                         bw.Write(s.Count);
                     }
                 }
+            });
+            _transport.Broadcast(data, data.Length, SendMode.Reliable);
+        }
+
+        /// <summary>
+        /// 广播自己的动作状态变化(砍树/浇水/钓鱼…)。
+        /// 只在**状态切换时**发,不跟着 15Hz 的位置包走 —— 动作切换本来就是低频事件,
+        /// 每帧带一个字符串纯属浪费带宽。
+        /// </summary>
+        public void SendAction(string actionState, float x, float y)
+        {
+            var data = MsgWriter.Frame(MsgType.PlayerAction, bw =>
+            {
+                bw.Write(actionState ?? ""); bw.Write(x); bw.Write(y);
+            });
+            _transport.Broadcast(data, data.Length, SendMode.Reliable);
+        }
+
+        /// <summary>主机广播已完成的任务 id 列表。</summary>
+        public void SendMissions(IList<string> finishedMissionIds)
+        {
+            var data = MsgWriter.Frame(MsgType.MissionSync, bw =>
+            {
+                int n = finishedMissionIds?.Count ?? 0;
+                bw.Write((ushort)Math.Min(n, ushort.MaxValue));
+                for (int i = 0; i < n; i++) bw.Write(finishedMissionIds[i] ?? "");
             });
             _transport.Broadcast(data, data.Length, SendMode.Reliable);
         }
@@ -245,6 +276,26 @@ namespace CoopCore
                             list.Add(c);
                         }
                         ContainersReceived?.Invoke(list);
+                    }
+                    break;
+
+                case MsgType.PlayerAction:
+                    using (var br = MsgWriter.Payload(data, length))
+                    {
+                        var peer = GetOrAdd(from);
+                        peer.ActionState = br.ReadString();
+                        float ax = br.ReadSingle(), ay = br.ReadSingle();
+                        PeerActionReceived?.Invoke(peer, peer.ActionState, ax, ay);
+                    }
+                    break;
+
+                case MsgType.MissionSync:
+                    using (var br = MsgWriter.Payload(data, length))
+                    {
+                        int n = br.ReadUInt16();
+                        var ids = new List<string>(n);
+                        for (int i = 0; i < n; i++) ids.Add(br.ReadString());
+                        MissionsReceived?.Invoke(ids);
                     }
                     break;
 

@@ -71,8 +71,8 @@
 | 时间 | `archiveHandle.timeData.totalSeconds` | `PassTimeNoControl` / `TrackBackTime` | ✅ 已实现并实测 |
 | 天气 | `timeData.climateManager.GetCurrentWeather(区域id)`,区域从 `weatherSystems` 枚举 | `archiveHandle.SetWeather(区域id, WeatherType, shouldRender)` | ✅ 已实现并实测(default/wetland/ruined_city 三区) |
 | 箱子 | `IContainer.inventory.ForEach` | `IContainer.OverwriteInventory(...)` | 🟡 已实现,**未端到端验证**(见下) |
-| 行为 | `BodyController.StateManager.current`(AgentState*) | `agent.EnterState<T>()` | ⬜ 待实现 |
-| 任务 | `MissionManager` / `BoardMissionManager` | 待摸底 | ⬜ 待实现 |
+| 行为 | `BodyController.StateManager.current`(AgentState*) | 广播状态名,切换时才发 | ✅ 已实现并实测(`ACTION_SEND state=AgentStateIdle`) |
+| 任务 | `farmData.missionManager.FinishMissions` | `CompleteMission(id)`(需先 `IsMissionListening`) | ✅ 已实现并实测(`MISSION_SEND count=13`) |
 
 ### 箱子同步的设计要点(待实现)
 
@@ -97,3 +97,16 @@ Start-Process "steam://rungameid/2285550"
 .\sim.ps1     # 看模拟客机是否打印 [箱子] 收到 N 个箱子
 ```
 预期日志:`CONTAINER_SCAN found>0` → `CONTAINER_SEND` → 客机 `[箱子]`。
+
+### 任务同步只做单向"完成"
+
+不做回退。任务完成往往伴随奖励发放、剧情推进、解锁标记,这些没有对应的逆操作,
+强行回滚只会把存档搞坏。客机比主机多完成的任务就留着 —— 顶多是它提前做了。
+
+### 行为同步当前只到"看得见对方在干什么"
+
+位置和动画哈希跟着 15Hz 状态包走;动作状态名单独在**切换时**发(可靠通道),
+因为动画哈希只在同一套 AnimatorController 下有意义,而状态名是稳定的语义标识,
+将来按动作触发音效/特效/世界结算靠的是它。
+
+动作的**世界后果**(树被砍倒、作物被浇)属于主机权威结算,依赖交互拦截,是下一步。
