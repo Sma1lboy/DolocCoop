@@ -111,6 +111,7 @@ namespace CoopSimClient
                 // (地上没有对应物品时应记 DROP_PICKUP_MISS 并优雅忽略)
                 if (!asHost && tick % 75 == 0 && session.Peers.Count > 0)
                 {
+                    session.SendChat("你好,我是模拟客机 —— 这条是聊天测试");
                     session.SendDropPickup(new System.Collections.Generic.List<DropEntry>
                     {
                         new DropEntry { ItemName = "sim_fake_drop", X = 10f, Y = 20f }
@@ -154,6 +155,7 @@ namespace CoopSimClient
         }
     }
 }
+
 
 
 

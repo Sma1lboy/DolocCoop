@@ -42,6 +42,8 @@ namespace DolocCoop
             CoopPanel.OnCreateLobby = CoopRuntime.CreateSteamLobby;
             CoopPanel.OnInviteFriend = CoopRuntime.InviteFriend;
             CoopPanel.OnOpenSteamOverlay = CoopRuntime.OpenInvite;
+            ChatUi.Send = CoopRuntime.SendChat;
+            ChatUi.IsInSession = CoopRuntime.HasSession;
 
             CoopSession.GameVersion = Application.version;   // 握手时比对,版本不同直接说清楚
             SaveGuard.Install();   // 客机存档保护:必须在建立任何会话之前挂好
@@ -52,6 +54,8 @@ namespace DolocCoop
             UnityLoopDriver.Add(CoopRuntime.Tick);
             UnityLoopDriver.Add(CoopMenu.Tick);
             UnityLoopDriver.Add(CoopPanel.Tick);
+
+            UnityLoopDriver.Add(ChatUi.Tick);
             UnityLoopDriver.Add(AutoTest.Tick);
             UnityLoopDriver.Install(s => Log.LogInfo(s));
         }
@@ -201,6 +205,17 @@ namespace DolocCoop
         public static void CreateSteamLobby() => StartSteamHost();
         public static void OpenInvite() => Invite();
 
+        /// <summary>聊天界面用:当前是否在会话中。</summary>
+        public static bool HasSession() => _session != null;
+
+        /// <summary>聊天界面用:发一句话。</summary>
+        public static void SendChat(string text)
+        {
+            if (_session == null) return;
+            _session.SendChat(text);
+            NetLog.Log($"CHAT_SEND {text}");
+        }
+
         /// <summary>供 AutoTest 无人值守调用:开回环主机(等价于按 F6)。</summary>
         public static void StartLoopbackHostForTest() => StartLoopback(asClient: false);
         public static void StartLoopbackClientForTest() => StartLoopback(asClient: true);
@@ -334,7 +349,14 @@ namespace DolocCoop
                 NetLog.Log($"PEER_LEFT id={p.Id}");
                 RemotePlayerRenderer.Remove(p.Id);
             };
-            _session.ChatReceived += (id, text) => { Plugin.Log.LogInfo($"[Chat] {id}: {text}"); NetLog.Log($"CHAT from={id}: {text}"); };
+            _session.ChatReceived += (id, text) =>
+            {
+                Plugin.Log.LogInfo($"[Chat] {id}: {text}");
+                NetLog.Log($"CHAT from={id}: {text}");
+                string who = _session.Peers.TryGetValue(id, out var p2) && !string.IsNullOrEmpty(p2.Name)
+                    ? p2.Name : id.ToString();
+                ChatUi.AddIncoming(who, text);
+            };
             _session.WorldSyncReceived += (hostSeconds, weather) =>
             {
                 NetLog.Sample(5, $"WORLD_RECV time={hostSeconds} regions={weather.Count}");
@@ -402,6 +424,7 @@ namespace DolocCoop
         }
     }
 }
+
 
 
 
