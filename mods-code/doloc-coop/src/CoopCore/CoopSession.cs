@@ -4,6 +4,19 @@ using System.IO;
 
 namespace CoopCore
 {
+    /// <summary>一个种植槽上的作物长势。BasinId 需跨端稳定(游戏侧用「类型#id」)。</summary>
+    public sealed class CropState
+    {
+        public string BasinId;
+        public string SeedId = "";
+        public int CurrentLevel;
+        public int Lifespan;
+        public int HarvestTimes;
+        public float GrowthValue;
+        public float HealthValue;
+        public bool IsMature, IsDead, IsMoist, IsPolluted;
+    }
+
     /// <summary>地上的一个掉落物。没有持久 id,靠「名字 + 位置」区分。</summary>
     public struct DropEntry
     {
@@ -66,6 +79,8 @@ namespace CoopCore
         public event Action<List<ContainerState>> ContainersReceived;
         /// <summary>某个玩家的动作状态变了:(玩家, 状态名, x, y)。</summary>
         public event Action<RemotePeer, string, float, float> PeerActionReceived;
+        /// <summary>收到主机的作物长势。</summary>
+        public event Action<List<CropState>> CropsReceived;
         /// <summary>收到主机的已完成任务列表。</summary>
         public event Action<List<string>> MissionsReceived;
         /// <summary>收到主机的掉落物列表(全量对账)。</summary>
@@ -258,6 +273,24 @@ namespace CoopCore
                     bw.Write(picked[i].ItemName ?? "");
                     bw.Write(picked[i].X);
                     bw.Write(picked[i].Y);
+                }
+            });
+            _transport.Broadcast(data, data.Length, SendMode.Reliable);
+        }
+
+        /// <summary>主机广播作物长势。只发指纹变了的槽。</summary>
+        public void SendCrops(IList<CropState> crops)
+        {
+            if (crops == null || crops.Count == 0) return;
+            var data = MsgWriter.Frame(MsgType.CropSync, bw =>
+            {
+                bw.Write((ushort)Math.Min(crops.Count, ushort.MaxValue));
+                foreach (var c in crops)
+                {
+                    bw.Write(c.BasinId ?? ""); bw.Write(c.SeedId ?? "");
+                    bw.Write(c.CurrentLevel); bw.Write(c.Lifespan); bw.Write(c.HarvestTimes);
+                    bw.Write(c.GrowthValue); bw.Write(c.HealthValue);
+                    bw.Write(c.IsMature); bw.Write(c.IsDead); bw.Write(c.IsMoist); bw.Write(c.IsPolluted);
                 }
             });
             _transport.Broadcast(data, data.Length, SendMode.Reliable);
@@ -458,6 +491,25 @@ namespace CoopCore
                     }
                     break;
 
+                case MsgType.CropSync:
+                    using (var br = MsgWriter.Payload(data, length))
+                    {
+                        int n = br.ReadUInt16();
+                        var crops = new List<CropState>(n);
+                        for (int i = 0; i < n; i++)
+                            crops.Add(new CropState
+                            {
+                                BasinId = br.ReadString(), SeedId = br.ReadString(),
+                                CurrentLevel = br.ReadInt32(), Lifespan = br.ReadInt32(),
+                                HarvestTimes = br.ReadInt32(),
+                                GrowthValue = br.ReadSingle(), HealthValue = br.ReadSingle(),
+                                IsMature = br.ReadBoolean(), IsDead = br.ReadBoolean(),
+                                IsMoist = br.ReadBoolean(), IsPolluted = br.ReadBoolean(),
+                            });
+                        CropsReceived?.Invoke(crops);
+                    }
+                    break;
+
                 case MsgType.MissionSync:
                     using (var br = MsgWriter.Payload(data, length))
                     {
@@ -533,4 +585,5 @@ namespace CoopCore
         }
     }
 }
+
 

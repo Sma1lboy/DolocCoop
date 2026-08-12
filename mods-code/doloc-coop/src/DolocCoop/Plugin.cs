@@ -171,6 +171,9 @@ namespace DolocCoop
                 MissionSync.TickHost(_session);
 
                 DropItemSync.TickHost(_session);
+
+
+                CropSync.TickHost(_session);
             }
 
             // 客机:检查地上有没有东西被自己捡走,需要上报主机(否则主机会把它生成回来)
@@ -230,7 +233,7 @@ namespace DolocCoop
             sb.AppendLine();
             sb.AppendLine("天气: " + TimeSync.DescribeWeather());
             sb.AppendLine("任务: " + MissionSync.Describe());
-            sb.AppendLine("箱子: 场景内 " + ContainerSync.TrackedCount + " 个在同步   地上掉落物: " + DropItemSync.LocalCount);
+            sb.AppendLine("箱子 " + ContainerSync.TrackedCount + " · 种植槽 " + CropSync.TrackedCount + " · 地上掉落物 " + DropItemSync.LocalCount);
             sb.AppendLine("我的动作: " + ActionSync.Friendly(ActionSync.ReadLocalActionState()));
             if (SaveGuard.IsClient)
                 sb.AppendLine("<color=#ffd479>存档保护: 本地只读,已拦截 " + SaveGuard.BlockedCount + " 次存盘</color>");
@@ -381,6 +384,7 @@ namespace DolocCoop
                 if (_transport != null && _transport.IsHost) TimeSync.ForceSendNext();
                 if (_transport != null && _transport.IsHost) ContainerSync.ResendAll();
                 if (_transport != null && _transport.IsHost) MissionSync.ResendAll();
+                if (_transport != null && _transport.IsHost) CropSync.ResendAll();
                 if (_transport != null && _transport.IsHost) DropItemSync.ResendAll();
                 ProfileSync.Resend();   // 新人进房:把自己的昵称与帽子再报一次
             };
@@ -415,6 +419,10 @@ namespace DolocCoop
             _session.ContainersReceived += states =>
             {
                 if (_transport != null && !_transport.IsHost) ContainerSync.ApplyRemote(states);
+            };
+            _session.CropsReceived += crops =>
+            {
+                if (_transport != null && !_transport.IsHost) CropSync.ApplyRemote(crops);
             };
             _session.MissionsReceived += ids =>
             {
@@ -465,6 +473,7 @@ namespace DolocCoop
         }
     }
 }
+
 
 
 

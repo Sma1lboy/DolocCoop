@@ -74,6 +74,7 @@
 | 行为 | `BodyController.StateManager.current`(AgentState*) | 广播状态名,切换时才发 | ✅ 已实现并实测(`ACTION_SEND state=AgentStateIdle`) |
 | 任务 | `farmData.missionManager.FinishMissions` | `CompleteMission(id)`(需先 `IsMissionListening`) | ✅ 已实现并实测(`MISSION_SEND count=13`) |
 | 掉落物 | `room.DM_dropitem.AllDatas` | `CreateDropItem` / `RemoveDropItem` | ✅ 已实现并实测(`DROP_SEND count=0`) |
+| 作物 | `PlantBasin.Crop.data`(CropData 结构) | `crop.SetCropData(...)` | ✅ 已实现并实测(`CROP_SEND first=PlantBasinSimple#1`) |
 
 ### 箱子同步的设计要点(待实现)
 
@@ -245,3 +246,4 @@ Steam 那条路径没法本地端到端测,只能靠走查。查出四个**只�
 覆盖也对不齐,会陷入重写循环 —— 记一条日志,别闷头刷。
 
 最终实测:`CONTAINER_APPLY id=Case#2 slots=20 total=1`,**只应用一次**,存档未变。
+
