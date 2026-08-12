@@ -73,6 +73,7 @@
 | 箱子 | `IContainer.inventory.ForEach` | `IContainer.OverwriteInventory(...)` | 🟡 已实现,**未端到端验证**(见下) |
 | 行为 | `BodyController.StateManager.current`(AgentState*) | 广播状态名,切换时才发 | ✅ 已实现并实测(`ACTION_SEND state=AgentStateIdle`) |
 | 任务 | `farmData.missionManager.FinishMissions` | `CompleteMission(id)`(需先 `IsMissionListening`) | ✅ 已实现并实测(`MISSION_SEND count=13`) |
+| 掉落物 | `room.DM_dropitem.AllDatas` | `CreateDropItem` / `RemoveDropItem` | ✅ 已实现并实测(`DROP_SEND count=0`) |
 
 ### 箱子同步的设计要点(待实现)
 
@@ -119,3 +120,24 @@ Start-Process "steam://rungameid/2285550"
 
 动作的**世界后果**(树被砍倒、作物被浇)属于主机权威结算,依赖交互拦截,是下一步。
 
+
+### 掉落物同步为什么用全量对账
+
+一个人把地上的东西捡了、另一个人还看得见并且能再捡一次 —— 直接变成刷物品,
+是两人同场景时最刺眼的不同步。
+
+用全量而不是增量事件:增量一旦丢包或乱序,地上就会留下永远捡不掉的幽灵物品。
+掉落物通常只有几个到几十个,整包对账的代价完全可以接受。
+
+标识用「物品名@量化坐标」(0.5 格):掉落物没有持久 id,而同一物品不会精确
+重叠在同一格。量化精度太细会因浮点抖动误判成"不同的物品"。
+
+### 三个反复踩到的坑(已在代码里加注释固化)
+
+1. **指纹初值不能用空串**:"地上没东西"算出来的指纹也是空串,
+   两者相等就永远不广播,客机的残留物品永远得不到清理。改用 null 当哨兵。
+2. **枚举预留值撞车**:`SceneChange = 21` 和 `ContainerSync = 21` 重复,
+   C# 会静默变成别名 —— 发 SceneChange 实际发出去的是 ContainerSync,极难排查。
+3. **日志采样吃掉首次事件**:纯取模采样下,只发生一次的事件永远达不到阈值,
+   日志一片空白,看起来就像功能没跑。这个坑连踩三次(WorldSync/ActionSync/DropItemSync),
+   最后改成 `NetLog.Sample` **首次必记、之后才采样**。

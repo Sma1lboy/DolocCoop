@@ -23,7 +23,10 @@ namespace DolocCoop
         private const float BroadcastInterval = 5f;
 
         private static float _timer;
-        private static string _lastSignature = "";
+
+        // 同 DropItemSync:用 null 表示"还没发过"。空串是"一个任务都没完成"的
+        // 合法指纹,拿它当初值会让这种存档永远不广播。
+        private static string _lastSignature;
         private static int _completed;
 
         // ---------- 主机侧 ----------
@@ -55,7 +58,7 @@ namespace DolocCoop
         /// <summary>新人进房:清掉指纹,下一轮重发完整列表。</summary>
         public static void ResendAll()
         {
-            _lastSignature = "";
+            _lastSignature = null;
             _timer = BroadcastInterval;
         }
 

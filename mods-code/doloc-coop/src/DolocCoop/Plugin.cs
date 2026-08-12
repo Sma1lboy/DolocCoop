@@ -121,6 +121,8 @@ namespace DolocCoop
                 TimeSync.TickHost(_session);
                 ContainerSync.TickHost(_session);
                 MissionSync.TickHost(_session);
+
+                DropItemSync.TickHost(_session);
             }
 
             ActionSync.Tick(_session);   // 行为:只在动作切换时发
@@ -168,7 +170,7 @@ namespace DolocCoop
             sb.AppendLine();
             sb.AppendLine("天气: " + TimeSync.DescribeWeather());
             sb.AppendLine("任务: " + MissionSync.Describe());
-            sb.AppendLine("箱子: 场景内 " + ContainerSync.TrackedCount + " 个在同步");
+            sb.AppendLine("箱子: 场景内 " + ContainerSync.TrackedCount + " 个在同步   地上掉落物: " + DropItemSync.LocalCount);
             sb.AppendLine("我的动作: " + ActionSync.Friendly(ActionSync.ReadLocalActionState()));
             sb.AppendLine();
             sb.AppendLine("<b>成员 (" + _session.Peers.Count + ")</b>");
@@ -299,6 +301,7 @@ namespace DolocCoop
                 if (_transport != null && _transport.IsHost) TimeSync.ForceSendNext();
                 if (_transport != null && _transport.IsHost) ContainerSync.ResendAll();
                 if (_transport != null && _transport.IsHost) MissionSync.ResendAll();
+                if (_transport != null && _transport.IsHost) DropItemSync.ResendAll();
             };
             _session.PeerLeft += p =>
             {
@@ -328,6 +331,10 @@ namespace DolocCoop
             _session.MissionsReceived += ids =>
             {
                 if (_transport != null && !_transport.IsHost) MissionSync.ApplyRemote(ids);
+            };
+            _session.DropItemsReceived += drops =>
+            {
+                if (_transport != null && !_transport.IsHost) DropItemSync.ApplyRemote(drops);
             };
             _session.PeerActionReceived += (peer, state, ax, ay) => ActionSync.OnRemoteAction(peer, state, ax, ay);
             NetLog.Log($"会话已建立 transport={transport.GetType().Name} selfId={transport.SelfId}");
@@ -366,6 +373,7 @@ namespace DolocCoop
         }
     }
 }
+
 
 
 

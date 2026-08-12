@@ -4,6 +4,13 @@ using System.IO;
 
 namespace CoopCore
 {
+    /// <summary>地上的一个掉落物。没有持久 id,靠「名字 + 位置」区分。</summary>
+    public struct DropEntry
+    {
+        public string ItemName;
+        public float X, Y;
+    }
+
     /// <summary>箱子里的一格(空格用 ItemName="" 表示)。</summary>
     public struct SlotItem
     {
@@ -61,6 +68,8 @@ namespace CoopCore
         public event Action<RemotePeer, string, float, float> PeerActionReceived;
         /// <summary>收到主机的已完成任务列表。</summary>
         public event Action<List<string>> MissionsReceived;
+        /// <summary>收到主机的掉落物列表(全量对账)。</summary>
+        public event Action<List<DropEntry>> DropItemsReceived;
         public event Action<string> Log;
 
         public CoopSession(ITransport transport, string modVersion)
@@ -151,6 +160,26 @@ namespace CoopCore
             var data = MsgWriter.Frame(MsgType.PlayerAction, bw =>
             {
                 bw.Write(actionState ?? ""); bw.Write(x); bw.Write(y);
+            });
+            _transport.Broadcast(data, data.Length, SendMode.Reliable);
+        }
+
+        /// <summary>
+        /// 主机广播当前房间的掉落物列表(全量)。
+        /// 全量而非增量:增量一旦丢包或乱序,地上就会留下永远捡不掉的幽灵物品。
+        /// </summary>
+        public void SendDropItems(IList<DropEntry> drops)
+        {
+            var data = MsgWriter.Frame(MsgType.DropItemSync, bw =>
+            {
+                int n = drops?.Count ?? 0;
+                bw.Write((ushort)Math.Min(n, ushort.MaxValue));
+                for (int i = 0; i < n; i++)
+                {
+                    bw.Write(drops[i].ItemName ?? "");
+                    bw.Write(drops[i].X);
+                    bw.Write(drops[i].Y);
+                }
             });
             _transport.Broadcast(data, data.Length, SendMode.Reliable);
         }
@@ -286,6 +315,17 @@ namespace CoopCore
                         peer.ActionState = br.ReadString();
                         float ax = br.ReadSingle(), ay = br.ReadSingle();
                         PeerActionReceived?.Invoke(peer, peer.ActionState, ax, ay);
+                    }
+                    break;
+
+                case MsgType.DropItemSync:
+                    using (var br = MsgWriter.Payload(data, length))
+                    {
+                        int n = br.ReadUInt16();
+                        var drops = new List<DropEntry>(n);
+                        for (int i = 0; i < n; i++)
+                            drops.Add(new DropEntry { ItemName = br.ReadString(), X = br.ReadSingle(), Y = br.ReadSingle() });
+                        DropItemsReceived?.Invoke(drops);
                     }
                     break;
 

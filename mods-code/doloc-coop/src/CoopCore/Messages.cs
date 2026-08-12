@@ -13,7 +13,8 @@ namespace CoopCore
         // v3: 扩展为 WorldSync,时间 + 各区域天气一起下发
         // v4: 新增 ContainerSync(箱子内容)
         // v5: 新增 PlayerAction(行为)与 MissionSync(任务)
-        public const ushort Version = 5;
+        // v6: 新增 DropItemSync(地上掉落物)
+        public const ushort Version = 6;
     }
 
     public enum MsgType : byte
@@ -32,9 +33,12 @@ namespace CoopCore
         WorldSync = 20,      // 主机→客机: 游戏内绝对时间 + 各区域天气
         ContainerSync = 21,  // 主机→客机: 若干箱子的整箱内容
         MissionSync = 22,    // 主机→客机: 已完成任务 id 列表
-        // 预留
-        SceneChange = 21,
-        SleepVote = 22,
+        DropItemSync = 23,   // 主机→客机: 当前房间掉落物全量列表
+
+        // 预留(注意别和上面的值撞:C# 允许重复值,会静默变成别名,
+        // 到时候发 SceneChange 实际发出去的是 ContainerSync,极难排查)
+        SceneChange = 30,
+        SleepVote = 31,
     }
 
     /// <summary>简单二进制消息帧: [MsgType:1][payload...]。</summary>
@@ -59,3 +63,4 @@ namespace CoopCore
         }
     }
 }
+

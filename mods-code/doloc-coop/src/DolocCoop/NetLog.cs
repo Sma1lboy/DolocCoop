@@ -57,7 +57,13 @@ namespace DolocCoop
                 Counters.TryGetValue(key, out int n);
                 n++;
                 Counters[key] = n;
-                if (n % everyN != 0) return;
+
+                // 首次必记,之后才采样。
+                // 采样的目的只是防刷屏,不该把"这件事开始发生了"这个最关键的信号吃掉 ——
+                // 只发生一次的事件(比如地上没东西时只广播一次)在纯取模采样下
+                // 永远达不到阈值,日志里一片空白,看起来就像功能没跑。
+                // 这个坑在排查 WorldSync / ActionSync / DropItemSync 时连踩了三次。
+                if (n != 1 && n % everyN != 0) return;
             }
             Log(line);
         }
