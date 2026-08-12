@@ -22,12 +22,27 @@
 # 前置:游戏目录已装 BepInEx 5(订阅 DTMAPI 后运行它的 1_install_dtmapi.bat 即可)
 #      本机安装 .NET SDK
 .\dev.ps1              # 编译 + 部署 + 启动游戏
-.\dev.ps1 -Dual        # 双开,用于本机联机测试
 .\dev.ps1 -NoLaunch    # 只编译部署
+.\sim.ps1              # 启动模拟客机(单机测联机,见下)
 ```
 
 游戏路径默认 `C:\Program Files (x86)\Steam\steamapps\common\Doloc Town`,
 可用环境变量 `DOLOC_TOWN_PATH` 覆盖。
+
+## 怎么本地测联机
+
+**游戏只能单开**(实测第二个实例会自行退出),所以用 `tools/CoopSimClient` ——
+一个借助 `CoopCore` 假扮第二个玩家的控制台程序:
+
+```powershell
+.\dev.ps1        # 终端1:启动游戏 → 进存档 → 按 F6(回环主机)
+.\sim.ps1        # 终端2:模拟客机接入,会绕着你的角色转圈
+```
+
+看到控制台打印 `[✔] 已收到主机玩家状态` 就说明双向通信正常;
+游戏里会出现一个跟随移动的化身,联机大厅面板的成员列表也会显示它的实时坐标。
+
+完整测试策略见 `mods-code/doloc-coop/docs/testing.md`。
 
 ## 功能现状(DolocCoop v0.2)
 
@@ -69,3 +84,4 @@
 ## 许可
 
 MIT(见 LICENSE)。注意:本仓库不包含任何游戏本体资源或反编译代码。
+
