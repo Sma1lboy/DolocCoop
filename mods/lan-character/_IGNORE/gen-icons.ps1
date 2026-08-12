@@ -98,8 +98,8 @@ $title = [System.Drawing.Font]::new("Microsoft YaHei", 34, [System.Drawing.FontS
 $sub   = [System.Drawing.Font]::new("Microsoft YaHei", 16)
 $shadow = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(90,0,0,0))
 $white  = [System.Drawing.Brushes]::White
-$g.DrawString("小蓝 Lan", $title, $shadow, 26, 26)
-$g.DrawString("小蓝 Lan", $title, $white,  24, 24)
+$g.DrawString("小澜 Lan", $title, $shadow, 26, 26)
+$g.DrawString("小澜 Lan", $title, $white,  24, 24)
 $g.DrawString("主角外观替换", $sub, $shadow, 27, 75)
 $g.DrawString("主角外观替换", $sub, $white,  25, 73)
 $title.Dispose(); $sub.Dispose(); $shadow.Dispose()
