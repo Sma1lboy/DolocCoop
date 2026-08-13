@@ -16,6 +16,20 @@ namespace CoopCore
         public string Version = "";
         /// <summary>创意工坊 id;0 表示是本地 Mod,别人没法自己订阅。</summary>
         public ulong WorkshopId;
+
+        /// <summary>Mod 优先级。多个皮肤同时启用时,游戏按这个决定谁盖住谁。</summary>
+        public int Priority;
+
+        /// <summary>
+        /// 这个 Mod 是否替换了主角外观。三个标志是游戏自己算好的
+        /// (ModInfo.HasPlayerOverride / HasPlayerHairOverride / HasPlayerBodyOverride),
+        /// 只有当一套贴图**每个动作每一帧都齐全**时才为真 —— 缺一帧就整个不算,
+        /// 所以拿它认皮肤比按文件名猜靠谱。
+        /// </summary>
+        public bool OverridesPlayer, OverridesHair, OverridesBody;
+
+        /// <summary>是不是一套角色皮肤(三个维度沾一个就算)。</summary>
+        public bool IsPlayerSkin => OverridesPlayer || OverridesHair || OverridesBody;
     }
 
     /// <summary>
@@ -49,6 +63,10 @@ namespace CoopCore
                 bw.Write(m.Title ?? "");
                 bw.Write(m.Version ?? "");
                 bw.Write(m.WorkshopId);
+                bw.Write(m.Priority);
+                bw.Write(m.OverridesPlayer);
+                bw.Write(m.OverridesHair);
+                bw.Write(m.OverridesBody);
             }
         }
 
@@ -64,9 +82,30 @@ namespace CoopCore
                     Title = br.ReadString(),
                     Version = br.ReadString(),
                     WorkshopId = br.ReadUInt64(),
+                    Priority = br.ReadInt32(),
+                    OverridesPlayer = br.ReadBoolean(),
+                    OverridesHair = br.ReadBoolean(),
+                    OverridesBody = br.ReadBoolean(),
                 });
             }
             return list;
+        }
+
+        /// <summary>
+        /// 从一份清单里挑出这个人正在用的角色皮肤。
+        /// 多套同时启用时按 Priority 取最高的 —— 和游戏自己的覆盖顺序一致
+        /// (ModManager 就是按 priority 降序排的)。没有则返回 null。
+        /// </summary>
+        public static ModEntry FindSkin(IList<ModEntry> mods)
+        {
+            if (mods == null) return null;
+            ModEntry best = null;
+            foreach (var m in mods)
+            {
+                if (m == null || !m.IsPlayerSkin) continue;
+                if (best == null || m.Priority > best.Priority) best = m;
+            }
+            return best;
         }
 
         /// <summary>

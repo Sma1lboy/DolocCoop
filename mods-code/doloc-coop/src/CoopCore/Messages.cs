@@ -19,7 +19,9 @@ namespace CoopCore
         //     其中游戏版本是**补记**:它其实在上一次改动里就加进 Hello 了,
         //     但当时忘了 +1,于是两个结构不同的 Hello 都自称 v7 —— 校验在说谎。
         //     靠 SafeReadString 才没崩,这次一并修正。
-        public const ushort Version = 8;
+        // v9: 清单条目补 Priority 与三个"是否替换主角外观"标志,
+        //     接收方靠它认出对方在用哪套皮肤。改了线格式就必须 +1 —— 见上面 v8 的教训。
+        public const ushort Version = 9;
     }
 
     public enum MsgType : byte

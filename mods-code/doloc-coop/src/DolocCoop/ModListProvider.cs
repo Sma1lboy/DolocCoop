@@ -47,6 +47,11 @@ namespace DolocCoop
                         Title = m.title ?? m.id,
                         Version = m.manifest?.version ?? "",
                         WorkshopId = m.workshopId,
+                        Priority = m.priority,
+                        // 游戏自己算好的:一套贴图每个动作每一帧都齐全才为真
+                        OverridesPlayer = m.HasPlayerOverride,
+                        OverridesHair = m.HasPlayerHairOverride,
+                        OverridesBody = m.HasPlayerBodyOverride,
                     });
                 }
                 // 排序让日志和 UI 稳定,也让两端的清单顺序无关

@@ -61,6 +61,9 @@ namespace CoopCoreTests
             EmptyHostListAcceptsAnything();
             RejectReasonNamesWorkshopId();
             RejectReasonTruncatesLongList();
+            SkinFlagsSurviveRoundTrip();
+            FindSkinPicksHighestPriority();
+            FindSkinIgnoresNonSkinMods();
 
             Console.WriteLine("\n-- 同步计算(SyncMath)--");
             DropKeyQuantizesCoordinates();
@@ -623,6 +626,51 @@ namespace CoopCoreTests
             string why = RoomMods.Validate(host, new List<ModEntry>());
             int lines = why.Split('\n').Length;
             Check("清单过长时截断", why.Contains("还有") && lines < 12, $"{lines} 行");
+        }
+
+        private static void SkinFlagsSurviveRoundTrip()
+        {
+            var src = new List<ModEntry>
+            {
+                new ModEntry { Id = "lan", Title = "小澜", Version = "1", WorkshopId = 7UL,
+                               Priority = 42, OverridesHair = true },
+            };
+            List<ModEntry> back;
+            using (var ms = new System.IO.MemoryStream())
+            {
+                using (var bw = new System.IO.BinaryWriter(ms, System.Text.Encoding.UTF8, true))
+                    RoomMods.Write(bw, src);
+                ms.Position = 0;
+                using (var br = new System.IO.BinaryReader(ms))
+                    back = RoomMods.Read(br);
+            }
+            Check("皮肤标志与优先级往返", back.Count == 1 && back[0].Priority == 42
+                && back[0].OverridesHair && !back[0].OverridesBody && !back[0].OverridesPlayer
+                && back[0].IsPlayerSkin);
+        }
+
+        private static void FindSkinPicksHighestPriority()
+        {
+            // 同时启用两套皮肤时,游戏按 priority 降序覆盖,我们得跟它一致
+            var mods = new List<ModEntry>
+            {
+                new ModEntry { Id = "skin-low",  Priority = 1,  OverridesHair = true },
+                new ModEntry { Id = "skin-high", Priority = 99, OverridesBody = true },
+                new ModEntry { Id = "plain",     Priority = 50 },
+            };
+            var pick = RoomMods.FindSkin(mods);
+            Check("多套皮肤取优先级最高", pick != null && pick.Id == "skin-high", pick?.Id ?? "(null)");
+        }
+
+        private static void FindSkinIgnoresNonSkinMods()
+        {
+            var mods = new List<ModEntry>
+            {
+                new ModEntry { Id = "hat", Priority = 100 },
+                new ModEntry { Id = "crop", Priority = 90 },
+            };
+            Check("没有皮肤则返回 null",
+                RoomMods.FindSkin(mods) == null && RoomMods.FindSkin(null) == null);
         }
 
         private static void Check(string name, bool ok, string detail = "")

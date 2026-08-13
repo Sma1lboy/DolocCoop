@@ -11,7 +11,8 @@ namespace CoopCore
     /// </summary>
     public static class BuildInfo
     {
-        public const string ModVersion = "0.4.0";
+        public const string ModVersion = "0.5.0";
     }
 }
+
 
