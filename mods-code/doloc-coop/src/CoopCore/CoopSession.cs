@@ -57,6 +57,8 @@ namespace CoopCore
         public string HatId = "";
         public string ActionState = "";   // 当前动作(砍树/浇水/钓鱼…),仅在切换时更新
         public DateTime LastSeenUtc;
+        /// <summary>对方启用的 Mod 清单(握手时拿到)。用于 UI 展示,不参与逻辑。</summary>
+        public List<ModEntry> Mods = new List<ModEntry>();
     }
 
     /// <summary>
@@ -339,9 +341,16 @@ namespace CoopCore
                 bw.Write(Protocol.Version);
                 bw.Write(_modVersion);
                 bw.Write(GameVersion ?? "");
+                RoomMods.Write(bw, LocalMods);
             });
             _transport.Send(id, data, data.Length, SendMode.Reliable);
         }
+
+        /// <summary>
+        /// 本机启用的 Mod 清单。由游戏侧在建立会话前赋值,换 Mod 后重新赋值即可。
+        /// 房主的这份就是房间规矩,客机必须全都有。
+        /// </summary>
+        public static List<ModEntry> LocalMods { get; set; } = new List<ModEntry>();
 
         /// <summary>
         /// 本机的游戏版本,进房时双方比对。
@@ -377,9 +386,16 @@ namespace CoopCore
                     {
                         ushort ver = br.ReadUInt16();
                         string modVer = br.ReadString();
-                        string gameVer = SafeReadString(br);   // v8 新增,兼容旧端
+                        string gameVer = SafeReadString(br);
+                        var peerMods = SafeReadMods(br);       // v8 新增,兼容旧端
 
                         string reject = Validate(ver, modVer, gameVer);
+
+                        // Mod 清单只由房主来卡。握手是双向的,两边都会走到这里;
+                        // 若两边都按自己的清单要求对方,客机多装一个 Mod 就会导致互相拒绝。
+                        if (reject == null && _transport.IsHost)
+                            reject = RoomMods.Validate(LocalMods, peerMods);
+
                         if (reject != null)
                         {
                             Log?.Invoke($"拒绝 peer {from}: {reject}");
@@ -393,6 +409,7 @@ namespace CoopCore
                         }
 
                         var peer = GetOrAdd(from);
+                        peer.Mods = peerMods;
                         var ack = MsgWriter.Frame(MsgType.HelloAck, bw =>
                         {
                             bw.Write(true); bw.Write(Protocol.Version); bw.Write("");
@@ -579,6 +596,22 @@ namespace CoopCore
         {
             try { return br.BaseStream.Position < br.BaseStream.Length ? br.ReadString() : ""; }
             catch { return ""; }
+        }
+
+        /// <summary>
+        /// 读 Mod 清单;字段不存在(旧端)或读坏了都返回空表。
+        /// 返回空表意味着"对方一个 Mod 都没有",房主那边会照常拦 —— 这是对的:
+        /// 旧版客机本来就没法保证装了房主要求的 Mod。
+        /// </summary>
+        private static List<ModEntry> SafeReadMods(BinaryReader br)
+        {
+            try
+            {
+                return br.BaseStream.Position < br.BaseStream.Length
+                    ? RoomMods.Read(br)
+                    : new List<ModEntry>();
+            }
+            catch { return new List<ModEntry>(); }
         }
 
         private RemotePeer GetOrAdd(ulong id)

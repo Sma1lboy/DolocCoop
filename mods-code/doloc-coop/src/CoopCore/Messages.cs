@@ -15,7 +15,11 @@ namespace CoopCore
         // v5: 新增 PlayerAction(行为)与 MissionSync(任务)
         // v6: 新增 DropItemSync(地上掉落物)
         // v7: 新增 DropPickup(客机捡拾上报)—— 没有它会刷物品,见 DropItemSync 注释
-        public const ushort Version = 7;
+        // v8: Hello 增加游戏版本 + 房间 Mod 清单。
+        //     其中游戏版本是**补记**:它其实在上一次改动里就加进 Hello 了,
+        //     但当时忘了 +1,于是两个结构不同的 Hello 都自称 v7 —— 校验在说谎。
+        //     靠 SafeReadString 才没崩,这次一并修正。
+        public const ushort Version = 8;
     }
 
     public enum MsgType : byte

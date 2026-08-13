@@ -370,6 +370,9 @@ namespace DolocCoop
             if (_session != null && _transport == transport) return;
             _session?.Dispose();
             _transport = transport;
+            // 必须在建会话之前 —— Hello 在 peer 一连上就发出去了,
+            // 清单晚一步刷新就会以空表参与握手
+            ModListProvider.Refresh();
             _session = new CoopSession(transport, Plugin.PluginVersion);
             // 同步域集中注册:加新领域只需在这里加一行,
             // 计时/差分/重发/路由都由 SyncRegistry 负责

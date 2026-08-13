@@ -51,6 +51,17 @@ namespace CoopCoreTests
             AcceptsWhenVersionsMatch();
             ToleratesMissingGameVersion();
 
+            Console.WriteLine("\n-- 房间 Mod 清单 --");
+            ModListRoundTrip();
+            AcceptsWhenClientHasAllHostMods();
+            AcceptsClientExtraMods();
+            RejectsMissingMod();
+            RejectsVersionMismatch();
+            TolerantWhenEitherVersionBlank();
+            EmptyHostListAcceptsAnything();
+            RejectReasonNamesWorkshopId();
+            RejectReasonTruncatesLongList();
+
             Console.WriteLine("\n-- 同步计算(SyncMath)--");
             DropKeyQuantizesCoordinates();
             DropSignatureIsOrderIndependent();
@@ -516,6 +527,102 @@ namespace CoopCoreTests
             var transport = new FakeTransport();
             var session = new CoopSession(transport, "test");
             return (session, transport, new List<string>());
+        }
+
+        // ---------------- 房间 Mod 清单 ----------------
+
+        private static ModEntry Mod(string id, string ver = "1.0.0", ulong workshop = 0, string title = null)
+            => new ModEntry { Id = id, Title = title ?? id, Version = ver, WorkshopId = workshop };
+
+        private static void ModListRoundTrip()
+        {
+            var src = new List<ModEntry>
+            {
+                Mod("lan-character", "0.1.0", 3712345678UL, "小澜 Lan"),
+                Mod("red-beret", "", 0UL),
+            };
+            List<ModEntry> back;
+            using (var ms = new System.IO.MemoryStream())
+            {
+                using (var bw = new System.IO.BinaryWriter(ms, System.Text.Encoding.UTF8, true))
+                    RoomMods.Write(bw, src);
+                ms.Position = 0;
+                using (var br = new System.IO.BinaryReader(ms))
+                    back = RoomMods.Read(br);
+            }
+            Check("清单编解码往返", back.Count == 2
+                && back[0].Id == "lan-character" && back[0].Title == "小澜 Lan"
+                && back[0].Version == "0.1.0" && back[0].WorkshopId == 3712345678UL
+                && back[1].Version == "" && back[1].WorkshopId == 0UL,
+                $"实得 {back.Count} 项");
+        }
+
+        private static void AcceptsWhenClientHasAllHostMods()
+        {
+            var host = new List<ModEntry> { Mod("a"), Mod("b") };
+            var client = new List<ModEntry> { Mod("b"), Mod("a") };   // 顺序不同也该放行
+            Check("客机齐备则放行", RoomMods.Validate(host, client) == null);
+        }
+
+        private static void AcceptsClientExtraMods()
+        {
+            // 规矩是房主定的:客机自己多装的不影响房主看到的世界,不该拦
+            var host = new List<ModEntry> { Mod("a") };
+            var client = new List<ModEntry> { Mod("a"), Mod("extra") };
+            Check("客机多装不拦", RoomMods.Validate(host, client) == null);
+        }
+
+        private static void RejectsMissingMod()
+        {
+            var host = new List<ModEntry> { Mod("a"), Mod("lan-character", "0.1.0", 0, "小澜 Lan") };
+            var client = new List<ModEntry> { Mod("a") };
+            string why = RoomMods.Validate(host, client);
+            Check("缺 Mod 被拒且点名", why != null && why.Contains("小澜 Lan"), why ?? "(放行了)");
+        }
+
+        private static void RejectsVersionMismatch()
+        {
+            var host = new List<ModEntry> { Mod("a", "2.0.0") };
+            var client = new List<ModEntry> { Mod("a", "1.0.0") };
+            string why = RoomMods.Validate(host, client);
+            Check("版本不同被拒", why != null && why.Contains("2.0.0") && why.Contains("1.0.0"), why ?? "(放行了)");
+        }
+
+        private static void TolerantWhenEitherVersionBlank()
+        {
+            // Mod 没填 version 时硬卡只会把人挡在门外却给不出解决办法
+            Check("一方没写版本号则不卡",
+                RoomMods.Validate(new List<ModEntry> { Mod("a", "") },
+                                  new List<ModEntry> { Mod("a", "1.0.0") }) == null
+                && RoomMods.Validate(new List<ModEntry> { Mod("a", "1.0.0") },
+                                     new List<ModEntry> { Mod("a", "") }) == null);
+        }
+
+        private static void EmptyHostListAcceptsAnything()
+        {
+            Check("房主没开 Mod 则谁都能进",
+                RoomMods.Validate(new List<ModEntry>(), new List<ModEntry> { Mod("x") }) == null
+                && RoomMods.Validate(null, null) == null);
+        }
+
+        private static void RejectReasonNamesWorkshopId()
+        {
+            // "方便查找"是这个功能的重点:得让人知道去哪订阅
+            var host = new List<ModEntry> { Mod("a", "1.0.0", 998877UL, "某 Mod") };
+            string why = RoomMods.Validate(host, new List<ModEntry>());
+            Check("拒绝理由带创意工坊 id", why != null && why.Contains("998877"), why ?? "(放行了)");
+            Check("能拼出订阅地址",
+                RoomMods.WorkshopUrl(998877UL) == "https://steamcommunity.com/sharedfiles/filedetails/?id=998877"
+                && RoomMods.WorkshopUrl(0UL) == null);
+        }
+
+        private static void RejectReasonTruncatesLongList()
+        {
+            var host = new List<ModEntry>();
+            for (int i = 0; i < 20; i++) host.Add(Mod("m" + i));
+            string why = RoomMods.Validate(host, new List<ModEntry>());
+            int lines = why.Split('\n').Length;
+            Check("清单过长时截断", why.Contains("还有") && lines < 12, $"{lines} 行");
         }
 
         private static void Check(string name, bool ok, string detail = "")
